@@ -1,20 +1,22 @@
 import { describe, expect, it } from "vitest";
+import { MATCH_FRAMES } from "../game/constants";
+import { createResultBlob } from "../result/checksum";
+import { generateMatch } from "../seed/match";
 import { createRng } from "./rng";
 import { createInitialState, FrameInput, GameState } from "./state";
 import { step } from "./step";
-import { getTerrainHeight } from "./terrain";
 
 function runFrames(seed: string, frames: number, inputs: Map<number, FrameInput>): GameState {
   let state = createInitialState(seed);
 
   for (let frame = 0; frame < frames; frame += 1) {
-    state = step(state, inputs.get(frame) ?? {});
+    state = step(state, inputs.get(frame) ?? { steer: 0, fire: false, boost: false });
   }
 
   return state;
 }
 
-describe("deterministic simulation", () => {
+describe("AsymSprint determinism", () => {
   it("RNG gives the same sequence for the same seed", () => {
     const a = createRng("stable-seed");
     const b = createRng("stable-seed");
@@ -25,28 +27,47 @@ describe("deterministic simulation", () => {
     expect(sequenceA).toEqual(sequenceB);
   });
 
-  it("terrain height is stable for the same seed and worldX", () => {
-    const positions = [-128, 0, 42.5, 320, 1024.75, 4096];
-    const firstPass = positions.map((worldX) => getTerrainHeight("terrain-seed", worldX));
-    const secondPass = positions.map((worldX) => getTerrainHeight("terrain-seed", worldX));
-
-    expect(firstPass).toEqual(secondPass);
-  });
-
-  it("same seed plus same input frames produces the same final state", () => {
-    const inputs = new Map<number, FrameInput>([
-      [10, { aim: { x: 0.8, y: 0.6 } }],
-      [18, { aim: { x: 0.8, y: 0.6 }, fire: true }],
-      [76, { aim: { x: 0.68, y: 0.74 } }],
-      [90, { aim: { x: 0.68, y: 0.74 }, fire: true }],
-      [140, { aim: { x: 0.95, y: 0.31 }, fire: true }]
-    ]);
-
-    const first = runFrames("replay-seed", 240, inputs);
-    const second = runFrames("replay-seed", 240, inputs);
+  it("same seed generates the same track and encounter", () => {
+    const first = generateMatch("track-seed");
+    const second = generateMatch("track-seed");
 
     expect(second).toEqual(first);
-    expect(second.score).toBe(first.score);
-    expect(second.frame).toBe(240);
+    expect(first.samples.length).toBeGreaterThan(20);
+    expect(first.obstacles.length).toBeGreaterThan(8);
+    expect(first.pickups.some((pickup) => pickup.kind === "boost")).toBe(true);
+    expect(first.pickups.some((pickup) => pickup.kind === "shield")).toBe(true);
+  });
+
+  it("same seed plus same input frames produces the same final result", () => {
+    const inputs = new Map<number, FrameInput>();
+
+    for (let frame = 0; frame < MATCH_FRAMES; frame += 1) {
+      inputs.set(frame, {
+        steer: frame % 92 < 30 ? -1 : frame % 92 > 58 ? 1 : 0,
+        fire: frame === 38 || frame === 142 || frame === 258 || frame === 406,
+        boost: frame === 74 || frame === 330
+      });
+    }
+
+    const first = runFrames("replay-seed", MATCH_FRAMES, inputs);
+    const second = runFrames("replay-seed", MATCH_FRAMES, inputs);
+
+    expect(second).toEqual(first);
+    expect(createResultBlob(second)).toEqual(createResultBlob(first));
+  });
+
+  it("result blob and checksum generation are stable", () => {
+    const inputs = new Map<number, FrameInput>([
+      [1, { steer: 1, fire: false, boost: false }],
+      [20, { steer: 1, fire: true, boost: false }],
+      [80, { steer: -1, fire: false, boost: true }],
+      [160, { steer: 0, fire: true, boost: false }]
+    ]);
+    const state = runFrames("checksum-seed", MATCH_FRAMES, inputs);
+    const result = createResultBlob(state);
+
+    expect(result).toEqual(createResultBlob(state));
+    expect(result.checksum).toMatch(/^[0-9a-f]{8}$/);
+    expect(result.timeTicks).toBe(state.frame);
   });
 });

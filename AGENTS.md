@@ -2,9 +2,9 @@
 
 ## Project
 
-This is a mobile-first TypeScript Canvas 2D game called Cannon Cart.
+This is a mobile-first TypeScript Canvas 2D game called Cannon Cart: AsymSprint.
 
-The player controls a cannon cart rendered near the bottom center of the screen. The simulation advances through a scrolling deterministic world. Terrain, targets, and events are generated from a seed. The player aims and fires projectiles to hit targets.
+The player controls a tiny cannon cart in a short top-down/tilted 2.5D arcade micro-race. The vehicle sprints along a deterministic ribbon track, steers around obstacles, collects pickups, fires a roof cannon forward, and races a deterministic rival or defender pressure system.
 
 ## Hard requirements
 
@@ -16,7 +16,7 @@ The player controls a cannon cart rendered near the bottom center of the screen.
 - Replays must record only seed plus input events, not game states or video.
 - Keep replay payloads small enough to fit in a URL.
 - Prefer simple code over framework complexity.
-- Mobile controls matter: drag to aim, tap/release to fire.
+- Mobile controls matter: drag left/right to steer and use on-screen fire/boost buttons.
 
 ## Commands
 
@@ -31,3 +31,4 @@ Before finishing a task, run:
 ```bash
 npm run build
 npm run test
+```

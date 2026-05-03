@@ -1,36 +1,50 @@
 export const FIXED_TIME_STEP = 1 / 60;
+export const FRAMES_PER_SECOND = 60;
 
-export const CART_SPEED = 92;
-export const CART_SCREEN_X_RATIO = 0.38;
-export const CART_SCREEN_Y_RATIO = 0.74;
-export const CART_WIDTH = 48;
-export const CART_HEIGHT = 26;
-export const WHEEL_RADIUS = 9;
-export const BARREL_LENGTH = 46;
-export const BARREL_THICKNESS = 10;
+export const PORTRAIT_WIDTH = 390;
+export const PORTRAIT_HEIGHT = 844;
 
-export const PROJECTILE_SPEED = 620;
-export const PROJECTILE_RADIUS = 5;
-export const PROJECTILE_GRAVITY = 760;
-export const PROJECTILE_MAX_AGE = 4.5;
-export const FIRE_COOLDOWN_FRAMES = 14;
+export const DEFAULT_SEED = "asym-sprint-001";
+export const MATCH_SECONDS = 11;
+export const MATCH_FRAMES = MATCH_SECONDS * FRAMES_PER_SECOND;
 
-export const TERRAIN_SEGMENT_WIDTH = 96;
-export const TERRAIN_BASE_HEIGHT = 0;
-export const TERRAIN_AMPLITUDE = 54;
-export const TERRAIN_DETAIL_AMPLITUDE = 17;
+export const TRACK_LENGTH = 2460;
+export const TRACK_WIDTH = 255;
+export const TRACK_SAMPLE_STEP = 90;
+export const LANE_COUNT = 3;
 
-export const TARGET_COUNT = 8;
-export const TARGET_START_X = 520;
-export const TARGET_SPACING = 430;
-export const TARGET_RADIUS_MIN = 17;
-export const TARGET_RADIUS_MAX = 28;
-export const TARGET_HEIGHT_MIN = 86;
-export const TARGET_HEIGHT_MAX = 190;
+export const PLAYER_RADIUS = 18;
+export const PLAYER_START_SPEED = 180;
+export const PLAYER_CRUISE_SPEED = 245;
+export const PLAYER_MAX_SPEED = 315;
+export const PLAYER_ACCELERATION = 210;
+export const PLAYER_STEER_SPEED = 205;
+export const PLAYER_OFFROAD_SLOWDOWN = 0.965;
+export const PLAYER_BUMP_FRAMES = 22;
 
-export const SCORE_PER_TARGET = 100;
+export const BOOST_FRAMES = 72;
+export const BOOST_SPEED_BONUS = 88;
+export const SHIELD_FRAMES = 180;
 
-export const DEFAULT_SEED = "cannon-cart-milestone-0.1";
+export const RIVAL_START_LEAD = 150;
+export const RIVAL_CRUISE_SPEED = 238;
+export const RIVAL_TAGGED_SPEED = 118;
+export const RIVAL_TAGGED_FRAMES = 96;
+export const RIVAL_RADIUS = 18;
 
-export const DEFAULT_AIM_X = 0.86;
-export const DEFAULT_AIM_Y = 0.5;
+export const CANNON_COOLDOWN_FRAMES = 38;
+export const CANNON_SPEED_COST = 18;
+export const SHOT_SPEED = 520;
+export const SHOT_RADIUS = 8;
+export const SHOT_MAX_AGE_FRAMES = 78;
+
+export const OBSTACLE_COUNT = 18;
+export const PICKUP_COUNT = 8;
+export const HAZARD_COUNT = 5;
+
+export const CAMERA_LOOKAHEAD = 270;
+
+export const TOUCH_BUTTON_SIZE = 78;
+export const TOUCH_BUTTON_GAP = 14;
+export const TOUCH_BOTTOM_MARGIN = 24;
+export const STEER_ZONE_WIDTH_RATIO = 0.58;

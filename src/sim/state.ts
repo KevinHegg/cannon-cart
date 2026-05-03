@@ -1,111 +1,154 @@
+import { BOOST_FRAMES, DEFAULT_SEED, PLAYER_START_SPEED, RIVAL_CRUISE_SPEED, RIVAL_TAGGED_FRAMES } from "../game/constants";
 import {
-  DEFAULT_AIM_X,
-  DEFAULT_AIM_Y,
-  DEFAULT_SEED,
-  TARGET_COUNT,
-  TARGET_HEIGHT_MAX,
-  TARGET_HEIGHT_MIN,
-  TARGET_RADIUS_MAX,
-  TARGET_RADIUS_MIN,
-  TARGET_SPACING,
-  TARGET_START_X
-} from "../game/constants";
-import { createRng } from "./rng";
-import { getTerrainHeight } from "./terrain";
-
-export interface AimVector {
-  x: number;
-  y: number;
-}
+  MatchDefinition,
+  ObstacleDefinition,
+  PickupDefinition,
+  generateMatch
+} from "../seed/match";
 
 export interface FrameInput {
-  aim?: AimVector;
-  fire?: boolean;
+  steer: -1 | 0 | 1;
+  fire: boolean;
+  boost: boolean;
+  restart?: boolean;
 }
 
-export interface Projectile {
-  id: number;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  age: number;
+export interface PlayerState {
+  progress: number;
+  lateral: number;
+  speed: number;
+  boostCharges: number;
+  boostFrames: number;
+  shieldCharges: number;
+  bumpFrames: number;
 }
 
-export interface Target {
-  id: number;
-  x: number;
-  y: number;
-  radius: number;
-  hit: boolean;
+export interface RivalState {
+  progress: number;
+  lateral: number;
+  speed: number;
+  taggedFrames: number;
 }
+
+export interface ShotState {
+  id: number;
+  progress: number;
+  lateral: number;
+  ageFrames: number;
+}
+
+export interface ObstacleState extends ObstacleDefinition {
+  destroyed: boolean;
+  collided: boolean;
+}
+
+export interface PickupState extends PickupDefinition {
+  collected: boolean;
+}
+
+export interface MatchStats {
+  obstaclesCleared: number;
+  obstaclesHit: number;
+  pickupsUsed: number;
+  cannonHits: number;
+  shotsFired: number;
+}
+
+export type GamePhase = "running" | "finished";
+export type GameOutcome = "win" | "loss";
 
 export interface GameState {
-  seed: string;
+  phase: GamePhase;
+  outcome: GameOutcome | null;
   frame: number;
-  worldX: number;
-  score: number;
-  aim: AimVector;
-  fireCooldown: number;
-  nextProjectileId: number;
-  projectiles: Projectile[];
-  targets: Target[];
+  match: MatchDefinition;
+  player: PlayerState;
+  rival: RivalState;
+  shots: ShotState[];
+  obstacles: ObstacleState[];
+  pickups: PickupState[];
+  stats: MatchStats;
+  cannonCooldown: number;
+  nextShotId: number;
 }
 
-export function normalizeAim(aim: AimVector): AimVector {
-  const length = Math.hypot(aim.x, aim.y);
-
-  if (length <= 0.0001) {
-    return { x: DEFAULT_AIM_X, y: DEFAULT_AIM_Y };
-  }
-
-  const normalized = {
-    x: aim.x / length,
-    y: aim.y / length
-  };
-
-  if (normalized.y < 0.08) {
-    return normalizeAim({ x: normalized.x, y: 0.08 });
-  }
-
-  return normalized;
-}
-
-export function getCartGroundY(state: Pick<GameState, "seed" | "worldX">): number {
-  return getTerrainHeight(state.seed, state.worldX);
-}
-
-export function createTargets(seed: string): Target[] {
-  const rng = createRng(`${seed}:targets`);
-  const targets: Target[] = [];
-
-  for (let index = 0; index < TARGET_COUNT; index += 1) {
-    const x = TARGET_START_X + index * TARGET_SPACING + rng.nextRange(-70, 84);
-    const groundY = getTerrainHeight(seed, x);
-    const radius = rng.nextRange(TARGET_RADIUS_MIN, TARGET_RADIUS_MAX);
-
-    targets.push({
-      id: index,
-      x,
-      y: groundY + rng.nextRange(TARGET_HEIGHT_MIN, TARGET_HEIGHT_MAX),
-      radius,
-      hit: false
-    });
-  }
-
-  return targets;
-}
+export const EMPTY_INPUT: FrameInput = {
+  steer: 0,
+  fire: false,
+  boost: false
+};
 
 export function createInitialState(seed = DEFAULT_SEED): GameState {
+  const match = generateMatch(seed);
+
   return {
-    seed,
+    phase: "running",
+    outcome: null,
     frame: 0,
-    worldX: 0,
-    score: 0,
-    aim: normalizeAim({ x: DEFAULT_AIM_X, y: DEFAULT_AIM_Y }),
-    fireCooldown: 0,
-    nextProjectileId: 1,
-    projectiles: [],
-    targets: createTargets(seed)
+    match,
+    player: {
+      progress: 0,
+      lateral: 0,
+      speed: PLAYER_START_SPEED,
+      boostCharges: 1,
+      boostFrames: 0,
+      shieldCharges: 0,
+      bumpFrames: 0
+    },
+    rival: {
+      progress: match.rival.startProgress,
+      lateral: 0,
+      speed: RIVAL_CRUISE_SPEED,
+      taggedFrames: 0
+    },
+    shots: [],
+    obstacles: match.obstacles.map((obstacle) => ({
+      ...obstacle,
+      destroyed: false,
+      collided: false
+    })),
+    pickups: match.pickups.map((pickup) => ({
+      ...pickup,
+      collected: false
+    })),
+    stats: {
+      obstaclesCleared: 0,
+      obstaclesHit: 0,
+      pickupsUsed: 0,
+      cannonHits: 0,
+      shotsFired: 0
+    },
+    cannonCooldown: 0,
+    nextShotId: 1
+  };
+}
+
+export function hasShield(player: Pick<PlayerState, "shieldCharges">): boolean {
+  return player.shieldCharges > 0;
+}
+
+export function isBoosting(player: Pick<PlayerState, "boostFrames">): boolean {
+  return player.boostFrames > 0;
+}
+
+export function activateShield(player: PlayerState): PlayerState {
+  return {
+    ...player,
+    shieldCharges: player.shieldCharges + 1
+  };
+}
+
+export function activateBoost(player: PlayerState): PlayerState {
+  return {
+    ...player,
+    boostCharges: Math.max(0, player.boostCharges - 1),
+    boostFrames: BOOST_FRAMES
+  };
+}
+
+export function tagRival(rival: RivalState): RivalState {
+  return {
+    ...rival,
+    taggedFrames: RIVAL_TAGGED_FRAMES
   };
 }
