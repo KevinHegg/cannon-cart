@@ -1,4 +1,6 @@
 import {
+  MUTE_BUTTON_MARGIN,
+  MUTE_BUTTON_SIZE,
   STEER_ZONE_WIDTH_RATIO,
   TOUCH_BOTTOM_MARGIN,
   TOUCH_BUTTON_GAP,
@@ -11,10 +13,22 @@ export interface InputVisualState {
   touchingSteer: boolean;
   firePressed: boolean;
   boostPressed: boolean;
+  mutePressed: boolean;
   dragAmount: number;
 }
 
+export interface UiInputActions {
+  muteToggle: boolean;
+  userGesture: boolean;
+}
+
+export interface InputReadout {
+  frame: FrameInput;
+  ui: UiInputActions;
+}
+
 export interface InputController {
+  readInput(): InputReadout;
   readFrameInput(): FrameInput;
   getVisualState(): InputVisualState;
   dispose(): void;
@@ -37,6 +51,9 @@ export function createInputControllerWithRestart(
   let pendingFire = false;
   let pendingBoost = false;
   let pendingRestart = false;
+  let pendingMuteToggle = false;
+  let pendingUserGesture = false;
+  let mutePressedFrames = 0;
   let pointerId: number | null = null;
   let dragStart: Point | null = null;
   let dragCurrent: Point | null = null;
@@ -44,6 +61,7 @@ export function createInputControllerWithRestart(
 
   const onKeyDown = (event: KeyboardEvent): void => {
     keys.add(event.code);
+    pendingUserGesture = true;
 
     if (event.code === "Space") {
       event.preventDefault();
@@ -58,6 +76,11 @@ export function createInputControllerWithRestart(
     if (event.code === "KeyR") {
       pendingRestart = true;
     }
+
+    if (event.code === "KeyM") {
+      pendingMuteToggle = true;
+      mutePressedFrames = 8;
+    }
   };
 
   const onKeyUp = (event: KeyboardEvent): void => {
@@ -69,9 +92,16 @@ export function createInputControllerWithRestart(
     const action = getActionAt(canvas, point);
 
     event.preventDefault();
+    pendingUserGesture = true;
 
     if (canTapRestart()) {
       pendingRestart = true;
+      return;
+    }
+
+    if (action === "mute") {
+      pendingMuteToggle = true;
+      mutePressedFrames = 8;
       return;
     }
 
@@ -120,6 +150,28 @@ export function createInputControllerWithRestart(
   canvas.addEventListener("pointercancel", endPointer);
 
   return {
+    readInput(): InputReadout {
+      const readout: InputReadout = {
+        frame: {
+          steer: getSteer(),
+          fire: pendingFire,
+          boost: pendingBoost,
+          restart: pendingRestart
+        },
+        ui: {
+          muteToggle: pendingMuteToggle,
+          userGesture: pendingUserGesture
+        }
+      };
+
+      pendingFire = false;
+      pendingBoost = false;
+      pendingRestart = false;
+      pendingMuteToggle = false;
+      pendingUserGesture = false;
+      mutePressedFrames = Math.max(0, mutePressedFrames - 1);
+      return readout;
+    },
     readFrameInput(): FrameInput {
       const input: FrameInput = {
         steer: getSteer(),
@@ -131,14 +183,18 @@ export function createInputControllerWithRestart(
       pendingFire = false;
       pendingBoost = false;
       pendingRestart = false;
+      pendingMuteToggle = false;
+      pendingUserGesture = false;
       return input;
     },
     getVisualState(): InputVisualState {
+      mutePressedFrames = Math.max(0, mutePressedFrames - 1);
       return {
         steer: getSteer(),
         touchingSteer,
         firePressed: pendingFire,
         boostPressed: pendingBoost,
+        mutePressed: mutePressedFrames > 0,
         dragAmount: getDragAmount()
       };
     },
@@ -192,9 +248,17 @@ function getPoint(canvas: HTMLCanvasElement, event: PointerEvent): Point {
   };
 }
 
-function getActionAt(canvas: HTMLCanvasElement, point: Point): "fire" | "boost" | "steer" {
+function getActionAt(canvas: HTMLCanvasElement, point: Point): "fire" | "boost" | "steer" | "mute" {
   const rect = canvas.getBoundingClientRect();
   const buttonY = rect.height - TOUCH_BOTTOM_MARGIN - TOUCH_BUTTON_SIZE;
+
+  if (
+    point.x > rect.width - MUTE_BUTTON_MARGIN - MUTE_BUTTON_SIZE &&
+    point.y > MUTE_BUTTON_MARGIN &&
+    point.y < MUTE_BUTTON_MARGIN + MUTE_BUTTON_SIZE
+  ) {
+    return "mute";
+  }
 
   if (point.x < rect.width * STEER_ZONE_WIDTH_RATIO && point.y > rect.height * 0.52) {
     return "steer";

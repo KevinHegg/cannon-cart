@@ -22,6 +22,7 @@ Desktop:
 - `D` / `Right Arrow`: steer right
 - `Space`: fire the roof cannon
 - `Shift` / `K`: use boost when a boost charge is available
+- `M`: mute or unmute procedural effects audio
 - `R`: restart after the result screen
 
 Mobile:
@@ -29,7 +30,12 @@ Mobile:
 - Drag horizontally in the lower-left steering zone.
 - Tap `FIRE` to shoot forward along the cart lane.
 - Tap `BOOST` to spend a stored boost charge.
+- Tap the speaker button in the top HUD to mute or unmute.
 - Shield pickups store one automatic shield charge for the next obstacle or hazard hit.
+
+## Audio
+
+The game uses short procedural Web Audio sound effects for UI taps, cannon fire, pickups, boost, shield blocks, hits, rival tags, and result stings. Audio unlocks only after the first user interaction, as required by browsers. The mute preference is stored in `localStorage`, and gameplay continues silently if Web Audio is unavailable.
 
 ## Mobile-First Presentation
 
@@ -45,3 +51,5 @@ To test on a phone:
 ## Determinism
 
 Gameplay state lives under `src/sim`, match generation lives under `src/seed`, rendering under `src/render`, input under `src/input`, and result/checksum logic under `src/result`. Gameplay uses the seeded RNG in `src/sim/rng.ts`; Canvas and DOM code stay out of deterministic simulation modules.
+
+Visual effects, browser input, and procedural audio are driven by gameplay events after deterministic simulation steps. They never feed back into physics, scoring, or checksums.

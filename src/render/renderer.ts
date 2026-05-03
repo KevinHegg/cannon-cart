@@ -2,6 +2,8 @@ import {
   CAMERA_LOOKAHEAD,
   CANNON_COOLDOWN_FRAMES,
   MATCH_FRAMES,
+  MUTE_BUTTON_MARGIN,
+  MUTE_BUTTON_SIZE,
   PLAYER_MAX_SPEED,
   PLAYER_RADIUS,
   PORTRAIT_HEIGHT,
@@ -13,8 +15,11 @@ import {
   TOUCH_BUTTON_SIZE,
   TRACK_WIDTH
 } from "../game/constants";
+import { AudioVisualState } from "../audio/gameAudio";
+import { GameEvent } from "../game/events";
 import { InputVisualState } from "../input/controller";
 import { createResultBlob } from "../result/checksum";
+import { getResultQuip } from "../result/quip";
 import { ObstacleKind, getTrackCenterX, getTrackTangentX } from "../seed/match";
 import { GameState, ObstacleState, PickupState, hasShield, isBoosting } from "../sim/state";
 import { hazardIsActive } from "../sim/step";
@@ -74,23 +79,29 @@ const EMPTY_INPUT_VISUAL: InputVisualState = {
   touchingSteer: false,
   firePressed: false,
   boostPressed: false,
+  mutePressed: false,
   dragAmount: 0
 };
 
+const DEFAULT_AUDIO_VISUAL: AudioVisualState = {
+  muted: false,
+  unlocked: false,
+  supported: true
+};
+
 const HUD_FONT = "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+const ROAD_SIGNS = ["CONE ZONE", "TINY CANNON CLUB", "BOOP LANE", "CAUTION: WOBBLES", "NO REFUNDS"];
 
 export class Renderer {
   private readonly context: CanvasRenderingContext2D;
   private viewport: Viewport = { width: 1, height: 1, dpr: 1 };
   private lastFrame = -1;
-  private lastCannonHits = 0;
-  private previousRivalTaggedFrames = 0;
   private shakeUntilFrame = 0;
   private readonly seenShotIds = new Set<number>();
-  private readonly seenDestroyedObstacleIds = new Set<number>();
   private smokePuffs: SmokePuff[] = [];
   private bursts: Burst[] = [];
   private floatingTexts: FloatingText[] = [];
+  private tutorialDismissed = false;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const context = canvas.getContext("2d");
@@ -103,9 +114,14 @@ export class Renderer {
     this.resize();
   }
 
-  draw(state: GameState, inputVisual: InputVisualState = EMPTY_INPUT_VISUAL): void {
+  draw(
+    state: GameState,
+    inputVisual: InputVisualState = EMPTY_INPUT_VISUAL,
+    audioVisual: AudioVisualState = DEFAULT_AUDIO_VISUAL,
+    events: GameEvent[] = []
+  ): void {
     this.resize();
-    this.syncEffects(state);
+    this.syncEffects(state, events);
 
     const ctx = this.context;
     const camera = this.getCamera(state);
@@ -125,7 +141,7 @@ export class Renderer {
     this.drawLockTarget(ctx, state, camera, lockTarget);
     this.drawPlayer(ctx, state, camera, inputVisual);
     this.drawVisualEffects(ctx, state, camera);
-    this.drawHud(ctx, state, inputVisual);
+    this.drawHud(ctx, state, inputVisual, audioVisual);
 
     if (state.phase === "finished") {
       this.drawResultOverlay(ctx, state);
@@ -149,16 +165,14 @@ export class Renderer {
     this.context.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  private syncEffects(state: GameState): void {
+  private syncEffects(state: GameState, events: GameEvent[]): void {
     if (state.frame < this.lastFrame) {
       this.seenShotIds.clear();
-      this.seenDestroyedObstacleIds.clear();
       this.smokePuffs = [];
       this.bursts = [];
       this.floatingTexts = [];
-      this.lastCannonHits = 0;
-      this.previousRivalTaggedFrames = 0;
       this.shakeUntilFrame = 0;
+      this.tutorialDismissed = false;
     }
 
     for (const shot of state.shots) {
@@ -170,29 +184,77 @@ export class Renderer {
       this.addMuzzleSmoke(state, shot.id);
     }
 
-    for (const obstacle of state.obstacles) {
-      if (!obstacle.destroyed || this.seenDestroyedObstacleIds.has(obstacle.id)) {
-        continue;
-      }
-
-      this.seenDestroyedObstacleIds.add(obstacle.id);
-      this.addBurst(obstacle.progress, obstacle.lateral, state.frame, colorForObstacle(obstacle.kind), "+100");
+    for (const event of events) {
+      this.applyEventEffect(event);
     }
 
-    if (state.rival.taggedFrames > 0 && this.previousRivalTaggedFrames <= 0) {
-      this.addBurst(state.rival.progress, state.rival.lateral, state.frame, "#bf8cff", "TAG");
-    }
-
-    if (state.stats.cannonHits > this.lastCannonHits) {
-      this.shakeUntilFrame = state.frame + 12;
-    }
-
-    this.lastCannonHits = state.stats.cannonHits;
-    this.previousRivalTaggedFrames = state.rival.taggedFrames;
     this.lastFrame = state.frame;
     this.smokePuffs = this.smokePuffs.filter((puff) => state.frame - puff.startFrame < 44);
     this.bursts = this.bursts.filter((burst) => state.frame - burst.startFrame < 34);
     this.floatingTexts = this.floatingTexts.filter((text) => state.frame - text.startFrame < 52);
+  }
+
+  private applyEventEffect(event: GameEvent): void {
+    if (event.kind === "fire") {
+      this.shakeUntilFrame = Math.max(this.shakeUntilFrame, event.frame + 4);
+      return;
+    }
+
+    if (event.kind === "pickupBoost") {
+      this.addBurst(event.progress, event.lateral, event.frame, "#39e0ff", "BOOST!");
+      return;
+    }
+
+    if (event.kind === "pickupShield") {
+      this.addBurst(event.progress, event.lateral, event.frame, "#9aff81", "SHIELD!");
+      return;
+    }
+
+    if (event.kind === "useBoost") {
+      this.addBurst(event.progress, event.lateral, event.frame, "#39e0ff", "ZIP!");
+      this.shakeUntilFrame = Math.max(this.shakeUntilFrame, event.frame + 6);
+      return;
+    }
+
+    if (event.kind === "shieldBlocked") {
+      this.addBurst(event.progress, event.lateral, event.frame, "#9aff81", event.callout ?? "BOING!");
+      this.shakeUntilFrame = Math.max(this.shakeUntilFrame, event.frame + 12);
+      return;
+    }
+
+    if (event.kind === "obstacleHit") {
+      this.addBurst(event.progress, event.lateral, event.frame, "#ff8aa0", event.callout ?? "BONK!");
+      this.shakeUntilFrame = Math.max(this.shakeUntilFrame, event.frame + 14);
+      return;
+    }
+
+    if (event.kind === "obstacleCleared") {
+      this.addBurst(
+        event.progress,
+        event.lateral,
+        event.frame,
+        colorForObstacle(event.obstacleKind ?? "gate"),
+        event.callout ?? "CLEAR!"
+      );
+      this.shakeUntilFrame = Math.max(this.shakeUntilFrame, event.frame + 11);
+      return;
+    }
+
+    if (event.kind === "rivalTagged") {
+      this.addBurst(event.progress, event.lateral, event.frame, "#bf8cff", event.callout ?? "ZAP!");
+      this.shakeUntilFrame = Math.max(this.shakeUntilFrame, event.frame + 16);
+      return;
+    }
+
+    if (event.kind === "cannonReady") {
+      this.floatingTexts.push({
+        progress: event.progress + 58,
+        lateral: event.lateral,
+        startFrame: event.frame,
+        text: "READY",
+        color: "#39e0ff"
+      });
+    }
   }
 
   private addMuzzleSmoke(state: GameState, shotId: number): void {
@@ -393,7 +455,47 @@ export class Renderer {
       const rightX = this.viewport.width - 36 + Math.cos(index * 1.7) * 16;
       this.drawToyBuilding(ctx, leftX, y, index, -1);
       this.drawToyBuilding(ctx, rightX, y + 42, index + 4, 1);
+
+      if (index % 3 === 0) {
+        this.drawRoadSign(ctx, leftX + 46, y + 36, index, -1);
+      }
+
+      if (index % 4 === 1) {
+        this.drawRoadSign(ctx, rightX - 48, y - 18, index + 7, 1);
+      }
     }
+    ctx.restore();
+  }
+
+  private drawRoadSign(ctx: CanvasRenderingContext2D, x: number, y: number, index: number, side: -1 | 1): void {
+    const label = ROAD_SIGNS[Math.abs(index) % ROAD_SIGNS.length];
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(side * 0.08 + Math.sin(index * 2.7) * 0.05);
+    ctx.globalAlpha = 0.8;
+    ctx.strokeStyle = "#10253d";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, 15);
+    ctx.lineTo(0, 44);
+    ctx.stroke();
+
+    const sign = ctx.createLinearGradient(-42, -18, 42, 18);
+    sign.addColorStop(0, "#fff176");
+    sign.addColorStop(0.55, "#ffb35c");
+    sign.addColorStop(1, "#ff8aa0");
+    ctx.fillStyle = sign;
+    ctx.strokeStyle = "#10253d";
+    ctx.lineWidth = 3;
+    this.roundRect(ctx, -43, -18, 86, 34, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#10253d";
+    ctx.font = `900 7.8px ${HUD_FONT}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, 0, 0);
     ctx.restore();
   }
 
@@ -783,14 +885,20 @@ export class Renderer {
         continue;
       }
 
+      const wobble = Math.sin(state.frame * 0.16 + obstacle.id * 1.7);
+      const juicedPoint = {
+        x: point.x + wobble * (obstacle.kind === "cone" ? 2.4 : 0.8) * camera.scale,
+        y: point.y + Math.abs(wobble) * (obstacle.kind === "barrel" ? 2.8 : 1.2) * camera.scale
+      };
+
       if (obstacle.kind === "cone") {
-        this.drawCone(ctx, point, camera.scale, obstacle.collided);
+        this.drawCone(ctx, juicedPoint, camera.scale, obstacle.collided, wobble * 0.08);
       } else if (obstacle.kind === "barrel") {
-        this.drawBarrel(ctx, point, camera.scale, obstacle.collided);
+        this.drawBarrel(ctx, juicedPoint, camera.scale, obstacle.collided);
       } else if (obstacle.kind === "oil") {
-        this.drawOil(ctx, point, camera.scale);
+        this.drawOil(ctx, juicedPoint, camera.scale, state.frame, obstacle.id);
       } else {
-        this.drawGate(ctx, point, camera.scale, obstacle.collided);
+        this.drawGate(ctx, juicedPoint, camera.scale, obstacle.collided);
       }
     }
   }
@@ -1017,14 +1125,24 @@ export class Renderer {
     }
   }
 
-  private drawHud(ctx: CanvasRenderingContext2D, state: GameState, inputVisual: InputVisualState): void {
-    this.drawTopHud(ctx, state);
+  private drawHud(
+    ctx: CanvasRenderingContext2D,
+    state: GameState,
+    inputVisual: InputVisualState,
+    audioVisual: AudioVisualState
+  ): void {
+    this.drawTopHud(ctx, state, audioVisual, inputVisual);
     this.drawControlZones(ctx, state, inputVisual);
     this.drawThumbButtons(ctx, state, inputVisual);
-    this.drawTutorial(ctx, state);
+    this.drawTutorial(ctx, state, inputVisual);
   }
 
-  private drawTopHud(ctx: CanvasRenderingContext2D, state: GameState): void {
+  private drawTopHud(
+    ctx: CanvasRenderingContext2D,
+    state: GameState,
+    audioVisual: AudioVisualState,
+    inputVisual: InputVisualState
+  ): void {
     const elapsed = state.frame / 60;
     const progress = clamp(state.player.progress / state.match.finishProgress, 0, 1);
     const cooldownProgress = 1 - clamp(state.cannonCooldown / CANNON_COOLDOWN_FRAMES, 0, 1);
@@ -1086,6 +1204,61 @@ export class Renderer {
 
     this.drawInventoryChip(ctx, this.viewport.width - 112, top + 69, "boost", state.player.boostCharges);
     this.drawInventoryChip(ctx, this.viewport.width - 61, top + 69, "shield", state.player.shieldCharges);
+    this.drawMuteButton(ctx, audioVisual, inputVisual);
+    ctx.restore();
+  }
+
+  private drawMuteButton(ctx: CanvasRenderingContext2D, audioVisual: AudioVisualState, inputVisual: InputVisualState): void {
+    const x = this.viewport.width - MUTE_BUTTON_MARGIN - MUTE_BUTTON_SIZE;
+    const y = MUTE_BUTTON_MARGIN;
+    const centerX = x + MUTE_BUTTON_SIZE / 2;
+    const centerY = y + MUTE_BUTTON_SIZE / 2;
+    const active = !audioVisual.muted && audioVisual.supported;
+    const scale = inputVisual.mutePressed ? 0.92 : 1;
+
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.scale(scale, scale);
+    ctx.translate(-centerX, -centerY);
+    const button = ctx.createRadialGradient(centerX - 8, centerY - 9, 3, centerX, centerY, MUTE_BUTTON_SIZE * 0.62);
+    button.addColorStop(0, "rgba(255, 255, 255, 0.88)");
+    button.addColorStop(0.34, active ? "rgba(57, 224, 255, 0.82)" : "rgba(255, 138, 160, 0.72)");
+    button.addColorStop(1, active ? "rgba(28, 88, 184, 0.88)" : "rgba(92, 40, 72, 0.88)");
+    ctx.fillStyle = button;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.42)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, MUTE_BUTTON_SIZE / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#10253d";
+    ctx.beginPath();
+    ctx.moveTo(centerX - 11, centerY - 5);
+    ctx.lineTo(centerX - 5, centerY - 5);
+    ctx.lineTo(centerX + 2, centerY - 11);
+    ctx.lineTo(centerX + 2, centerY + 11);
+    ctx.lineTo(centerX - 5, centerY + 5);
+    ctx.lineTo(centerX - 11, centerY + 5);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = "#10253d";
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = "round";
+    if (active) {
+      ctx.beginPath();
+      ctx.arc(centerX + 5, centerY, 7, -0.68, 0.68);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(centerX + 6, centerY, 12, -0.58, 0.58);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(centerX - 10, centerY - 12);
+      ctx.lineTo(centerX + 12, centerY + 12);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -1132,7 +1305,7 @@ export class Renderer {
   }
 
   private drawControlZones(ctx: CanvasRenderingContext2D, state: GameState, inputVisual: InputVisualState): void {
-    const show = state.frame < 210 || inputVisual.touchingSteer;
+    const show = state.frame < 190 || inputVisual.touchingSteer;
     if (!show || state.phase === "finished") {
       return;
     }
@@ -1144,7 +1317,7 @@ export class Renderer {
     const knobX = zoneX + zoneWidth / 2 + inputVisual.dragAmount * 52;
 
     ctx.save();
-    ctx.globalAlpha = state.frame < 210 ? 0.9 : 0.68;
+    ctx.globalAlpha = inputVisual.touchingSteer ? 0.82 : state.frame < 120 ? 0.78 : 0.34;
     const pad = ctx.createLinearGradient(zoneX, zoneY, zoneX + zoneWidth, zoneY + zoneHeight);
     pad.addColorStop(0, "rgba(57, 224, 255, 0.22)");
     pad.addColorStop(1, "rgba(8, 17, 38, 0.42)");
@@ -1220,6 +1393,11 @@ export class Renderer {
     const centerY = y + size / 2;
 
     ctx.save();
+    if (pressed) {
+      ctx.translate(centerX, centerY);
+      ctx.scale(0.94, 0.94);
+      ctx.translate(-centerX, -centerY);
+    }
     const button = ctx.createRadialGradient(centerX - 14, centerY - 16, 5, centerX, centerY, size * 0.6);
     button.addColorStop(0, ready ? "#ffffff" : "rgba(255, 255, 255, 0.28)");
     button.addColorStop(0.28, ready ? (pressed ? "#fff176" : "#ff8aa0") : "rgba(255, 255, 255, 0.18)");
@@ -1279,6 +1457,11 @@ export class Renderer {
     const centerY = y + size / 2;
 
     ctx.save();
+    if (pressed) {
+      ctx.translate(centerX, centerY);
+      ctx.scale(0.94, 0.94);
+      ctx.translate(-centerX, -centerY);
+    }
     const button = ctx.createRadialGradient(centerX - 12, centerY - 13, 4, centerX, centerY, size * 0.62);
     button.addColorStop(0, enabled ? "#ffffff" : "rgba(255, 255, 255, 0.25)");
     button.addColorStop(0.28, enabled ? (pressed ? "#fff176" : "#4df2ff") : "rgba(255, 255, 255, 0.14)");
@@ -1305,39 +1488,76 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawTutorial(ctx: CanvasRenderingContext2D, state: GameState): void {
-    if (state.frame > 210 || state.phase === "finished") {
+  private drawTutorial(ctx: CanvasRenderingContext2D, state: GameState, inputVisual: InputVisualState): void {
+    if (state.phase === "finished") {
       return;
     }
 
-    const alpha = state.frame > 160 ? 1 - (state.frame - 160) / 50 : 1;
-    const width = Math.min(this.viewport.width - 42, 330);
+    const activeInput =
+      inputVisual.touchingSteer || inputVisual.steer !== 0 || inputVisual.firePressed || inputVisual.boostPressed;
+    if (activeInput || state.frame > 125) {
+      this.tutorialDismissed = true;
+    }
+
+    if (this.tutorialDismissed) {
+      if (state.frame > 215) {
+        return;
+      }
+
+      const alpha = clamp(1 - Math.max(0, state.frame - 155) / 60, 0, 0.72);
+      if (alpha <= 0) {
+        return;
+      }
+
+      const width = Math.min(this.viewport.width - 64, 260);
+      const x = (this.viewport.width - width) / 2;
+      const y = 126;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "rgba(8, 17, 38, 0.72)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+      ctx.lineWidth = 1.5;
+      this.roundRect(ctx, x, y, width, 34, 17);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `900 12px ${HUD_FONT}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("Line up, fire, grab boost & shield", this.viewport.width / 2, y + 17);
+      ctx.restore();
+      return;
+    }
+
+    const alpha = state.frame > 95 ? 1 - (state.frame - 95) / 30 : 1;
+    const width = Math.min(this.viewport.width - 54, 308);
     const x = (this.viewport.width - width) / 2;
-    const y = 118;
+    const y = 122;
 
     ctx.save();
     ctx.globalAlpha = clamp(alpha, 0, 1);
-    const panel = ctx.createLinearGradient(x, y, x + width, y + 116);
-    panel.addColorStop(0, "rgba(23, 43, 100, 0.9)");
-    panel.addColorStop(1, "rgba(8, 17, 38, 0.76)");
+    const panel = ctx.createLinearGradient(x, y, x + width, y + 84);
+    panel.addColorStop(0, "rgba(23, 43, 100, 0.84)");
+    panel.addColorStop(1, "rgba(8, 17, 38, 0.7)");
     ctx.fillStyle = panel;
     ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
     ctx.lineWidth = 2;
-    this.roundRect(ctx, x, y, width, 116, 20);
+    this.roundRect(ctx, x, y, width, 84, 20);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = "#fff176";
-    ctx.font = `900 21px ${HUD_FONT}`;
+    ctx.font = `900 18px ${HUD_FONT}`;
     ctx.textAlign = "center";
-    ctx.fillText("Cannon Cart: AsymSprint", this.viewport.width / 2, y + 30);
+    ctx.fillText("Cannon Cart: AsymSprint", this.viewport.width / 2, y + 26);
 
-    const lines = ["Steer to line up", "Fire cannon to clear", "Grab boost & shield"];
-    ctx.font = `800 15px ${HUD_FONT}`;
+    const lines = ["Steer to line up", "Fire to clear", "Grab boost & shield"];
+    ctx.font = `800 13px ${HUD_FONT}`;
     lines.forEach((line, index) => {
-      const chipY = y + 53 + index * 19;
+      const chipY = y + 46 + index * 15;
       ctx.fillStyle = index === 0 ? "#39e0ff" : index === 1 ? "#ff8aa0" : "#9aff81";
       ctx.beginPath();
-      ctx.arc(x + 39, chipY - 4, 5, 0, Math.PI * 2);
+      ctx.arc(x + 43, chipY - 4, 4, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "#ffffff";
       ctx.textAlign = "left";
@@ -1348,14 +1568,17 @@ export class Renderer {
 
   private drawResultOverlay(ctx: CanvasRenderingContext2D, state: GameState): void {
     const result = createResultBlob(state);
+    const quip = getResultQuip(result);
+    const outcome = result.outcome === "win" ? "win" : "loss";
     const panelWidth = Math.min(346, this.viewport.width - 34);
-    const panelHeight = 390;
+    const panelHeight = 422;
     const panelX = (this.viewport.width - panelWidth) / 2;
-    const panelY = Math.max(108, (this.viewport.height - panelHeight) / 2);
+    const panelY = Math.max(94, (this.viewport.height - panelHeight) / 2);
 
     ctx.save();
     ctx.fillStyle = "rgba(6, 10, 24, 0.74)";
     ctx.fillRect(0, 0, this.viewport.width, this.viewport.height);
+    this.drawResultMood(ctx, outcome, panelX, panelY, panelWidth, state.frame, result.checksum);
 
     const card = ctx.createLinearGradient(panelX, panelY, panelX + panelWidth, panelY + panelHeight);
     card.addColorStop(0, "#ffffff");
@@ -1379,8 +1602,12 @@ export class Renderer {
     ctx.fillText(result.outcome === "win" ? "WIN" : "LOSS", this.viewport.width / 2, panelY + 61);
 
     ctx.fillStyle = "#10253d";
+    ctx.font = `900 14px ${HUD_FONT}`;
+    ctx.fillText(quip, this.viewport.width / 2, panelY + 101);
+
+    ctx.fillStyle = "#10253d";
     ctx.font = `800 15px ${HUD_FONT}`;
-    ctx.fillText("Press R / Tap to restart", this.viewport.width / 2, panelY + panelHeight - 28);
+    ctx.fillText("Tap to run it back / Press R", this.viewport.width / 2, panelY + panelHeight - 28);
 
     const rows: Array<[string, string, string]> = [
       ["TIME", `${result.timeTicks} ticks`, `${result.timeSeconds.toFixed(2)}s`],
@@ -1391,8 +1618,42 @@ export class Renderer {
     ];
 
     rows.forEach((row, index) => {
-      this.drawResultRow(ctx, panelX + 24, panelY + 91 + index * 47, panelWidth - 48, row[0], row[1], row[2]);
+      this.drawResultRow(ctx, panelX + 24, panelY + 121 + index * 47, panelWidth - 48, row[0], row[1], row[2]);
     });
+    ctx.restore();
+  }
+
+  private drawResultMood(
+    ctx: CanvasRenderingContext2D,
+    outcome: "win" | "loss",
+    panelX: number,
+    panelY: number,
+    panelWidth: number,
+    frame: number,
+    checksum: string
+  ): void {
+    ctx.save();
+    const seed = checksum.split("").reduce((total, char) => total + char.charCodeAt(0), 0);
+    const colors = outcome === "win" ? ["#fff176", "#39e0ff", "#9aff81", "#ff8aa0"] : ["#8aa7ff", "#d5deff", "#bf8cff"];
+    const count = outcome === "win" ? 34 : 18;
+
+    for (let index = 0; index < count; index += 1) {
+      const side = index % 2 === 0 ? -1 : 1;
+      const x = panelX + panelWidth / 2 + side * (70 + (index % 7) * 18);
+      const y = panelY - 16 + ((index * 31 + seed) % 180) + Math.sin(frame * 0.04 + index) * 4;
+      ctx.globalAlpha = outcome === "win" ? 0.78 : 0.36;
+      ctx.fillStyle = colors[index % colors.length];
+      ctx.translate(x, y);
+      ctx.rotate(index + frame * 0.025);
+      if (outcome === "win") {
+        this.roundRect(ctx, -5, -3, 10, 6, 2);
+      } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, 5 + (index % 3), 0, Math.PI * 2);
+      }
+      ctx.fill();
+      ctx.setTransform(this.viewport.dpr, 0, 0, this.viewport.dpr, 0, 0);
+    }
     ctx.restore();
   }
 
@@ -1512,8 +1773,11 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawCone(ctx: CanvasRenderingContext2D, point: Point, scale: number, faded: boolean): void {
+  private drawCone(ctx: CanvasRenderingContext2D, point: Point, scale: number, faded: boolean, wobble: number): void {
     ctx.save();
+    ctx.translate(point.x, point.y);
+    ctx.rotate(wobble);
+    ctx.translate(-point.x, -point.y);
     ctx.globalAlpha = faded ? 0.34 : 1;
     this.drawSquashShadow(ctx, point.x, point.y + 18 * scale, 25 * scale, 8 * scale);
     const cone = ctx.createLinearGradient(point.x - 16 * scale, point.y - 26 * scale, point.x + 16 * scale, point.y + 22 * scale);
@@ -1567,7 +1831,7 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawOil(ctx: CanvasRenderingContext2D, point: Point, scale: number): void {
+  private drawOil(ctx: CanvasRenderingContext2D, point: Point, scale: number, frame: number, id: number): void {
     ctx.save();
     this.drawSquashShadow(ctx, point.x, point.y + 10 * scale, 36 * scale, 8 * scale);
     ctx.fillStyle = "rgba(7, 10, 22, 0.88)";
@@ -1577,7 +1841,8 @@ export class Renderer {
     ctx.ellipse(point.x, point.y, 32 * scale, 18 * scale, -0.18, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    ctx.strokeStyle = "rgba(57, 224, 255, 0.75)";
+    const shimmer = Math.sin(frame * 0.16 + id) * 0.5 + 0.5;
+    ctx.strokeStyle = `rgba(57, 224, 255, ${0.55 + shimmer * 0.28})`;
     ctx.lineWidth = 2 * scale;
     ctx.beginPath();
     ctx.ellipse(point.x - 4 * scale, point.y - 3 * scale, 18 * scale, 7 * scale, -0.25, 0, Math.PI * 1.65);
