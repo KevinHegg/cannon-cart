@@ -48,3 +48,5 @@ export const TOUCH_BUTTON_SIZE = 78;
 export const TOUCH_BUTTON_GAP = 14;
 export const TOUCH_BOTTOM_MARGIN = 24;
 export const STEER_ZONE_WIDTH_RATIO = 0.58;
+export const MUTE_BUTTON_SIZE = 36;
+export const MUTE_BUTTON_MARGIN = 17;

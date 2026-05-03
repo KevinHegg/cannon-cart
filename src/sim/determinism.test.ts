@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { MATCH_FRAMES } from "../game/constants";
+import { collectGameEvents, GameEvent } from "../game/events";
 import { createResultBlob } from "../result/checksum";
+import { getResultQuip } from "../result/quip";
 import { generateMatch } from "../seed/match";
 import { createRng } from "./rng";
 import { createInitialState, FrameInput, GameState } from "./state";
@@ -14,6 +16,24 @@ function runFrames(seed: string, frames: number, inputs: Map<number, FrameInput>
   }
 
   return state;
+}
+
+function runFramesWithEvents(
+  seed: string,
+  frames: number,
+  inputs: Map<number, FrameInput>
+): { state: GameState; events: GameEvent[] } {
+  let state = createInitialState(seed);
+  const events: GameEvent[] = [];
+
+  for (let frame = 0; frame < frames; frame += 1) {
+    const input = inputs.get(frame) ?? { steer: 0, fire: false, boost: false };
+    const previous = state;
+    state = step(state, input);
+    events.push(...collectGameEvents(previous, state, input));
+  }
+
+  return { state, events };
 }
 
 describe("AsymSprint determinism", () => {
@@ -69,5 +89,26 @@ describe("AsymSprint determinism", () => {
     expect(result).toEqual(createResultBlob(state));
     expect(result.checksum).toMatch(/^[0-9a-f]{8}$/);
     expect(result.timeTicks).toBe(state.frame);
+    expect(getResultQuip(result)).toBe(getResultQuip(result));
+  });
+
+  it("deterministic gameplay events are stable for the same replay inputs", () => {
+    const inputs = new Map<number, FrameInput>();
+
+    for (let frame = 0; frame < MATCH_FRAMES; frame += 1) {
+      inputs.set(frame, {
+        steer: frame % 78 < 26 ? -1 : frame % 78 > 52 ? 1 : 0,
+        fire: frame === 22 || frame === 98 || frame === 214 || frame === 362,
+        boost: frame === 42 || frame === 260
+      });
+    }
+
+    const first = runFramesWithEvents("event-seed", MATCH_FRAMES, inputs);
+    const second = runFramesWithEvents("event-seed", MATCH_FRAMES, inputs);
+
+    expect(second.state).toEqual(first.state);
+    expect(second.events).toEqual(first.events);
+    expect(second.events.map((event) => event.kind)).toContain("fire");
+    expect(createResultBlob(second.state).checksum).toBe(createResultBlob(first.state).checksum);
   });
 });
