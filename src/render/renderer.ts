@@ -90,7 +90,16 @@ const DEFAULT_AUDIO_VISUAL: AudioVisualState = {
 };
 
 const HUD_FONT = "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
-const ROAD_SIGNS = ["CONE ZONE", "TINY CANNON CLUB", "BOOP LANE", "CAUTION: WOBBLES", "NO REFUNDS"];
+const ROAD_SIGNS = [
+  "CAMP WOBBLEWOOD",
+  "CONE ZONE",
+  "NO RUNNING, EXCEPT NOW",
+  "PICNIC PANIC",
+  "BONK SAFELY",
+  "MARSHMALLOW SPEEDWAY",
+  "RANGER SAYS: NICE TRY",
+  "NO REFUNDS, JUST RESTARTS"
+];
 
 export class Renderer {
   private readonly context: CanvasRenderingContext2D;
@@ -102,6 +111,7 @@ export class Renderer {
   private bursts: Burst[] = [];
   private floatingTexts: FloatingText[] = [];
   private tutorialDismissed = false;
+  private lastCalloutFrame = -999;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const context = canvas.getContext("2d");
@@ -173,6 +183,7 @@ export class Renderer {
       this.floatingTexts = [];
       this.shakeUntilFrame = 0;
       this.tutorialDismissed = false;
+      this.lastCalloutFrame = -999;
     }
 
     for (const shot of state.shots) {
@@ -201,12 +212,12 @@ export class Renderer {
     }
 
     if (event.kind === "pickupBoost") {
-      this.addBurst(event.progress, event.lateral, event.frame, "#39e0ff", "BOOST!");
+      this.addBurst(event.progress, event.lateral, event.frame, "#2fb7e8", "FIZZ!");
       return;
     }
 
     if (event.kind === "pickupShield") {
-      this.addBurst(event.progress, event.lateral, event.frame, "#9aff81", "SHIELD!");
+      this.addBurst(event.progress, event.lateral, event.frame, "#ffd56a", "GLOW!");
       return;
     }
 
@@ -233,7 +244,7 @@ export class Renderer {
         event.progress,
         event.lateral,
         event.frame,
-        colorForObstacle(event.obstacleKind ?? "gate"),
+        colorForObstacle(event.obstacleKind ?? "barricade"),
         event.callout ?? "CLEAR!"
       );
       this.shakeUntilFrame = Math.max(this.shakeUntilFrame, event.frame + 11);
@@ -258,7 +269,7 @@ export class Renderer {
   }
 
   private addMuzzleSmoke(state: GameState, shotId: number): void {
-    for (let index = 0; index < 6; index += 1) {
+    for (let index = 0; index < 4; index += 1) {
       const direction = index % 2 === 0 ? 1 : -1;
       this.smokePuffs.push({
         progress: state.player.progress + 31 + index * 3,
@@ -266,14 +277,17 @@ export class Renderer {
         startFrame: state.frame,
         driftLateral: direction * (0.18 + index * 0.05),
         driftProgress: -0.7 - index * 0.08,
-        radius: 8 + index * 1.7 + (shotId % 3)
+        radius: 7 + index * 1.4 + (shotId % 2)
       });
     }
   }
 
   private addBurst(progress: number, lateral: number, frame: number, color: string, text: string): void {
     this.bursts.push({ progress, lateral, startFrame: frame, color });
-    this.floatingTexts.push({ progress, lateral, startFrame: frame, text, color });
+    if (text && frame - this.lastCalloutFrame >= 26) {
+      this.floatingTexts.push({ progress, lateral, startFrame: frame, text, color });
+      this.lastCalloutFrame = frame;
+    }
   }
 
   private getCamera(state: GameState): Camera {
@@ -301,10 +315,10 @@ export class Renderer {
 
   private drawBackground(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
     const sky = ctx.createLinearGradient(0, 0, 0, this.viewport.height);
-    sky.addColorStop(0, "#18245f");
-    sky.addColorStop(0.3, "#2472bd");
-    sky.addColorStop(0.62, "#46cfe0");
-    sky.addColorStop(1, "#28b58b");
+    sky.addColorStop(0, "#134a7c");
+    sky.addColorStop(0.36, "#4aa7d5");
+    sky.addColorStop(0.68, "#8fdca9");
+    sky.addColorStop(1, "#5ab56f");
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, this.viewport.width, this.viewport.height);
 
@@ -332,9 +346,9 @@ export class Renderer {
   private drawDioramaFloor(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
     const horizon = this.viewport.height * 0.42;
     const floor = ctx.createLinearGradient(0, horizon, 0, this.viewport.height);
-    floor.addColorStop(0, "rgba(91, 238, 193, 0.12)");
-    floor.addColorStop(0.5, "rgba(20, 154, 134, 0.42)");
-    floor.addColorStop(1, "rgba(9, 92, 96, 0.72)");
+    floor.addColorStop(0, "rgba(159, 226, 139, 0.18)");
+    floor.addColorStop(0.5, "rgba(69, 159, 93, 0.48)");
+    floor.addColorStop(1, "rgba(31, 105, 70, 0.78)");
 
     ctx.save();
     ctx.translate(camera.shakeX * 0.12, camera.shakeY * 0.12);
@@ -342,7 +356,7 @@ export class Renderer {
     ctx.fillRect(0, horizon, this.viewport.width, this.viewport.height - horizon);
 
     const gridOffset = (state.player.progress * 0.08) % 48;
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.strokeStyle = "rgba(255, 245, 190, 0.08)";
     ctx.lineWidth = 1;
     for (let y = horizon + gridOffset; y < this.viewport.height; y += 48) {
       ctx.beginPath();
@@ -415,7 +429,7 @@ export class Renderer {
 
     ctx.save();
     ctx.translate(camera.shakeX * 0.18, camera.shakeY * 0.18);
-    ctx.fillStyle = "#135d84";
+    ctx.fillStyle = "#2b785e";
     ctx.beginPath();
     ctx.moveTo(-80, base + 70);
     for (let x = -80; x <= this.viewport.width + 80; x += 34) {
@@ -427,7 +441,7 @@ export class Renderer {
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = "#1faa8d";
+    ctx.fillStyle = "#4ca85e";
     ctx.beginPath();
     ctx.moveTo(-80, base + 120);
     for (let x = -80; x <= this.viewport.width + 80; x += 36) {
@@ -444,27 +458,47 @@ export class Renderer {
   private drawToyScenery(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
     ctx.save();
     ctx.translate(camera.shakeX * 0.35, camera.shakeY * 0.35);
-    for (let index = -2; index < 12; index += 1) {
-      const progress = state.player.progress + index * 150 - ((state.player.progress * 0.32) % 150);
+    for (let index = -2; index < 11; index += 1) {
+      const progress = state.player.progress + index * 170 - ((state.player.progress * 0.28) % 170);
       const y = camera.playerY - (progress - state.player.progress) * camera.scale * 0.42;
       if (y < -90 || y > this.viewport.height + 90) {
         continue;
       }
 
-      const leftX = 26 + Math.sin(index * 2.1) * 16;
-      const rightX = this.viewport.width - 36 + Math.cos(index * 1.7) * 16;
-      this.drawToyBuilding(ctx, leftX, y, index, -1);
-      this.drawToyBuilding(ctx, rightX, y + 42, index + 4, 1);
+      const leftX = 28 + Math.sin(index * 2.1) * 12;
+      const rightX = this.viewport.width - 34 + Math.cos(index * 1.7) * 12;
+      this.drawCampProp(ctx, leftX, y, index, -1);
+      this.drawCampProp(ctx, rightX, y + 42, index + 4, 1);
 
-      if (index % 3 === 0) {
-        this.drawRoadSign(ctx, leftX + 46, y + 36, index, -1);
+      if (index % 4 === 0) {
+        this.drawRoadSign(ctx, leftX + 48, y + 34, index, -1);
       }
 
-      if (index % 4 === 1) {
+      if (index % 5 === 1) {
         this.drawRoadSign(ctx, rightX - 48, y - 18, index + 7, 1);
       }
     }
     ctx.restore();
+  }
+
+  private drawCampProp(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    index: number,
+    side: -1 | 1
+  ): void {
+    const kind = Math.abs(index) % 5;
+
+    if (kind === 0) {
+      this.drawCabin(ctx, x, y, index, side);
+    } else if (kind === 1 || kind === 4) {
+      this.drawPine(ctx, x, y, 0.72 + (Math.abs(index) % 3) * 0.08);
+    } else if (kind === 2) {
+      this.drawPicnicTable(ctx, x, y, side);
+    } else {
+      this.drawPond(ctx, x + side * 8, y + 10, 0.78);
+    }
   }
 
   private drawRoadSign(ctx: CanvasRenderingContext2D, x: number, y: number, index: number, side: -1 | 1): void {
@@ -473,71 +507,142 @@ export class Renderer {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(side * 0.08 + Math.sin(index * 2.7) * 0.05);
-    ctx.globalAlpha = 0.8;
-    ctx.strokeStyle = "#10253d";
-    ctx.lineWidth = 3;
+    ctx.globalAlpha = 0.68;
+    ctx.strokeStyle = "rgba(64, 45, 28, 0.7)";
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.moveTo(0, 15);
     ctx.lineTo(0, 44);
     ctx.stroke();
 
     const sign = ctx.createLinearGradient(-42, -18, 42, 18);
-    sign.addColorStop(0, "#fff176");
-    sign.addColorStop(0.55, "#ffb35c");
-    sign.addColorStop(1, "#ff8aa0");
+    sign.addColorStop(0, "#ffe0a3");
+    sign.addColorStop(0.58, "#d68b4b");
+    sign.addColorStop(1, "#a95f3c");
     ctx.fillStyle = sign;
-    ctx.strokeStyle = "#10253d";
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#4a321f";
+    ctx.lineWidth = 2.5;
     this.roundRect(ctx, -43, -18, 86, 34, 8);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = "#10253d";
-    ctx.font = `900 7.8px ${HUD_FONT}`;
+    ctx.fillStyle = "#2d2117";
+    ctx.font = `900 ${label.length > 18 ? 5.8 : label.length > 13 ? 6.6 : 7.8}px ${HUD_FONT}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(label, 0, 0);
     ctx.restore();
   }
 
-  private drawToyBuilding(
+  private drawCabin(
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
     index: number,
     side: -1 | 1
   ): void {
-    const width = 28 + (index % 3) * 7;
-    const height = 34 + (index % 4) * 9;
-    const color = index % 2 === 0 ? "#ffcc5c" : "#ff7fa5";
+    const width = 30 + (Math.abs(index) % 3) * 6;
+    const height = 28 + (Math.abs(index) % 4) * 7;
+    const color = index % 2 === 0 ? "#d9864f" : "#f0b35f";
 
     ctx.save();
     ctx.translate(x, y);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.14)";
     this.roundRect(ctx, -width / 2 + side * 4, height * 0.28, width, 10, 5);
     ctx.fill();
+    ctx.fillStyle = "#6a3c29";
+    ctx.beginPath();
+    ctx.moveTo(-width / 2 - 5, -height / 2 + 5);
+    ctx.lineTo(0, -height / 2 - 14);
+    ctx.lineTo(width / 2 + 5, -height / 2 + 5);
+    ctx.closePath();
+    ctx.fill();
     ctx.fillStyle = color;
-    ctx.strokeStyle = "#123047";
+    ctx.strokeStyle = "#4a321f";
     ctx.lineWidth = 2;
-    this.roundRect(ctx, -width / 2, -height / 2, width, height, 7);
+    this.roundRect(ctx, -width / 2, -height / 2 + 3, width, height, 7);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = "#ffffff";
-    for (let row = 0; row < 2; row += 1) {
-      for (let col = 0; col < 2; col += 1) {
-        ctx.globalAlpha = 0.68;
-        this.roundRect(ctx, -width * 0.25 + col * width * 0.28, -height * 0.2 + row * 12, 5, 5, 2);
-        ctx.fill();
-      }
+    ctx.fillStyle = "rgba(255, 244, 185, 0.62)";
+    this.roundRect(ctx, -width * 0.2, -height * 0.05, 8, 8, 2);
+    ctx.fill();
+    this.roundRect(ctx, width * 0.04, -height * 0.05, 8, 8, 2);
+    ctx.fill();
+    ctx.fillStyle = "#4a321f";
+    this.roundRect(ctx, -5, height * 0.08, 10, height * 0.38, 4);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  private drawPine(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number): void {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.13)";
+    ctx.beginPath();
+    ctx.ellipse(5, 34 * scale, 18 * scale, 6 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#6b442b";
+    this.roundRect(ctx, -4 * scale, 11 * scale, 8 * scale, 28 * scale, 3 * scale);
+    ctx.fill();
+    ctx.fillStyle = "#1f714e";
+    for (let tier = 0; tier < 3; tier += 1) {
+      const top = (-31 + tier * 17) * scale;
+      const half = (23 - tier * 3) * scale;
+      ctx.beginPath();
+      ctx.moveTo(0, top);
+      ctx.lineTo(-half, top + 32 * scale);
+      ctx.lineTo(half, top + 32 * scale);
+      ctx.closePath();
+      ctx.fill();
     }
     ctx.restore();
   }
 
+  private drawPicnicTable(ctx: CanvasRenderingContext2D, x: number, y: number, side: -1 | 1): void {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(side * 0.12);
+    ctx.globalAlpha = 0.66;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.14)";
+    this.roundRect(ctx, -24, 18, 48, 8, 4);
+    ctx.fill();
+    ctx.fillStyle = "#b76a3e";
+    ctx.strokeStyle = "#5d3624";
+    ctx.lineWidth = 2;
+    this.roundRect(ctx, -28, -10, 56, 11, 5);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#e5b56d";
+    this.roundRect(ctx, -22, 5, 44, 7, 4);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  private drawPond(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number): void {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.globalAlpha = 0.48;
+    const water = ctx.createRadialGradient(-8 * scale, -6 * scale, 2, 0, 0, 31 * scale);
+    water.addColorStop(0, "#c9fff3");
+    water.addColorStop(0.36, "#65cfe2");
+    water.addColorStop(1, "#277b9d");
+    ctx.fillStyle = water;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 34 * scale, 17 * scale, -0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
   private drawConfetti(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
-    const colors = ["#fff176", "#ff8aa0", "#39e0ff", "#9aff81", "#bf8cff"];
+    const colors = ["#fff4a8", "#ffd46c", "#baf7a6"];
 
     ctx.save();
     ctx.translate(camera.shakeX * 0.08, camera.shakeY * 0.08);
-    for (let index = 0; index < 36; index += 1) {
+    for (let index = 0; index < 22; index += 1) {
       const band = index % 2 === 0 ? 0.18 : 0.82;
       const x = this.viewport.width * band + Math.sin(index * 9.17) * 28;
       const y = ((index * 47 - state.frame * (0.24 + (index % 5) * 0.03)) % (this.viewport.height + 80)) - 40;
@@ -545,11 +650,12 @@ export class Renderer {
         continue;
       }
 
-      ctx.globalAlpha = 0.22 + (index % 4) * 0.07;
+      ctx.globalAlpha = 0.14 + (index % 4) * 0.04;
       ctx.fillStyle = colors[index % colors.length];
       ctx.translate(x, y);
       ctx.rotate(state.frame * 0.01 + index);
-      this.roundRect(ctx, -4, -2, 8, 4, 2);
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.2 + (index % 2), 0, Math.PI * 2);
       ctx.fill();
       ctx.setTransform(this.viewport.dpr, 0, 0, this.viewport.dpr, 0, 0);
       ctx.translate(camera.shakeX * 0.08, camera.shakeY * 0.08);
@@ -573,37 +679,37 @@ export class Renderer {
     ctx.restore();
 
     const outer = ctx.createLinearGradient(0, 0, this.viewport.width, this.viewport.height);
-    outer.addColorStop(0, "#1e2b68");
-    outer.addColorStop(0.46, "#263a88");
-    outer.addColorStop(1, "#0d7e83");
+    outer.addColorStop(0, "#6f4a2d");
+    outer.addColorStop(0.48, "#8b6137");
+    outer.addColorStop(1, "#4f7a46");
     ctx.fillStyle = outer;
     this.fillRibbon(ctx, left, right);
 
     const bevel = ctx.createLinearGradient(this.viewport.width * 0.18, 0, this.viewport.width * 0.82, 0);
-    bevel.addColorStop(0, "#ffe26d");
-    bevel.addColorStop(0.18, "#29f6df");
-    bevel.addColorStop(0.82, "#29f6df");
-    bevel.addColorStop(1, "#ffe26d");
+    bevel.addColorStop(0, "#d99b54");
+    bevel.addColorStop(0.18, "#f0d47a");
+    bevel.addColorStop(0.82, "#f0d47a");
+    bevel.addColorStop(1, "#d99b54");
     ctx.fillStyle = bevel;
     this.fillRibbon(ctx, innerLeft, innerRight);
 
     const road = ctx.createLinearGradient(this.viewport.width * 0.2, 0, this.viewport.width * 0.84, 0);
-    road.addColorStop(0, "#6f55d6");
-    road.addColorStop(0.24, "#604ec8");
-    road.addColorStop(0.5, "#3476d3");
-    road.addColorStop(0.78, "#2eb2ce");
-    road.addColorStop(1, "#238faf");
+    road.addColorStop(0, "#6f594f");
+    road.addColorStop(0.24, "#7a6356");
+    road.addColorStop(0.5, "#8a7060");
+    road.addColorStop(0.78, "#7c6558");
+    road.addColorStop(1, "#604f48");
     ctx.fillStyle = road;
     this.fillRibbon(ctx, surfaceLeft, surfaceRight);
 
-    this.strokeTrackEdge(ctx, left, "rgba(42, 255, 232, 0.46)", 18 * camera.scale);
-    this.strokeTrackEdge(ctx, right, "rgba(42, 255, 232, 0.46)", 18 * camera.scale);
-    this.strokeTrackEdge(ctx, left, "#10253d", 5 * camera.scale);
-    this.strokeTrackEdge(ctx, right, "#10253d", 5 * camera.scale);
-    this.strokeTrackEdge(ctx, innerLeft, "#fff176", 7 * camera.scale);
-    this.strokeTrackEdge(ctx, innerRight, "#fff176", 7 * camera.scale);
-    this.strokeTrackEdge(ctx, surfaceLeft, "rgba(255, 255, 255, 0.2)", 3 * camera.scale);
-    this.strokeTrackEdge(ctx, surfaceRight, "rgba(0, 22, 40, 0.26)", 3 * camera.scale);
+    this.strokeTrackEdge(ctx, left, "rgba(75, 48, 30, 0.5)", 18 * camera.scale);
+    this.strokeTrackEdge(ctx, right, "rgba(75, 48, 30, 0.5)", 18 * camera.scale);
+    this.strokeTrackEdge(ctx, left, "#3b271b", 5 * camera.scale);
+    this.strokeTrackEdge(ctx, right, "#3b271b", 5 * camera.scale);
+    this.strokeTrackEdge(ctx, innerLeft, "#f6d67b", 7 * camera.scale);
+    this.strokeTrackEdge(ctx, innerRight, "#f6d67b", 7 * camera.scale);
+    this.strokeTrackEdge(ctx, surfaceLeft, "rgba(255, 240, 196, 0.22)", 3 * camera.scale);
+    this.strokeTrackEdge(ctx, surfaceRight, "rgba(36, 24, 18, 0.24)", 3 * camera.scale);
   }
 
   private drawRoadDetails(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
@@ -615,7 +721,7 @@ export class Renderer {
 
   private drawLaneLine(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera, lateral: number, phase: number): void {
     ctx.save();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.48)";
+    ctx.strokeStyle = "rgba(255, 235, 178, 0.54)";
     ctx.lineWidth = 5 * camera.scale;
     ctx.lineCap = "round";
     ctx.setLineDash([22 * camera.scale, 28 * camera.scale]);
@@ -646,8 +752,8 @@ export class Renderer {
 
       ctx.translate(point.x, point.y);
       ctx.rotate(Math.sin(index) * 0.4);
-      ctx.fillStyle = index % 3 === 0 ? "#fff176" : "#ffffff";
-      this.roundRect(ctx, -11 * camera.scale, -3 * camera.scale, 22 * camera.scale, 6 * camera.scale, 3 * camera.scale);
+      ctx.fillStyle = index % 3 === 0 ? "#f4cf6a" : "#b98957";
+      this.roundRect(ctx, -9 * camera.scale, -3 * camera.scale, 18 * camera.scale, 6 * camera.scale, 3 * camera.scale);
       ctx.fill();
       ctx.setTransform(this.viewport.dpr, 0, 0, this.viewport.dpr, 0, 0);
       ctx.globalAlpha = 0.18;
@@ -669,8 +775,8 @@ export class Renderer {
         ctx.save();
         ctx.translate(point.x, point.y);
         ctx.rotate(Math.atan2(tangent, 1) + side * 0.12);
-        ctx.fillStyle = index % 2 === 0 ? "#ff5d75" : "#f7fbff";
-        ctx.strokeStyle = "rgba(16, 37, 61, 0.32)";
+        ctx.fillStyle = index % 2 === 0 ? "#d98c4a" : "#f5d47a";
+        ctx.strokeStyle = "rgba(70, 45, 28, 0.32)";
         ctx.lineWidth = 1.5 * camera.scale;
         this.roundRect(ctx, -14 * camera.scale, -5 * camera.scale, 28 * camera.scale, 10 * camera.scale, 4 * camera.scale);
         ctx.fill();
@@ -693,31 +799,31 @@ export class Renderer {
 
     const start = this.project(state, camera, state.player.progress + 30, state.player.lateral);
     const end = this.project(state, camera, state.player.progress + 340, state.player.lateral);
-    const beamColor = lockTarget ? "rgba(255, 241, 118, 0.9)" : "rgba(139, 239, 255, 0.54)";
+    const beamColor = lockTarget ? "rgba(255, 220, 104, 0.88)" : "rgba(255, 236, 174, 0.34)";
 
     ctx.save();
     ctx.lineCap = "round";
     ctx.strokeStyle = "rgba(0, 0, 0, 0.22)";
-    ctx.lineWidth = 15 * camera.scale;
+    ctx.lineWidth = 10 * camera.scale;
     ctx.beginPath();
     ctx.moveTo(start.x, start.y);
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
 
     ctx.strokeStyle = beamColor;
-    ctx.lineWidth = lockTarget ? 7 * camera.scale : 5 * camera.scale;
-    ctx.setLineDash(lockTarget ? [18 * camera.scale, 7 * camera.scale] : [13 * camera.scale, 10 * camera.scale]);
+    ctx.lineWidth = lockTarget ? 6 * camera.scale : 3.5 * camera.scale;
+    ctx.setLineDash(lockTarget ? [17 * camera.scale, 8 * camera.scale] : [10 * camera.scale, 16 * camera.scale]);
     ctx.lineDashOffset = -state.frame * (lockTarget ? 1.9 : 1.25);
     ctx.beginPath();
     ctx.moveTo(start.x, start.y);
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
 
-    const coneWidth = lockTarget ? 68 : 52;
+    const coneWidth = lockTarget ? 58 : 44;
     const farLeft = this.project(state, camera, state.player.progress + 285, state.player.lateral - coneWidth);
     const farRight = this.project(state, camera, state.player.progress + 285, state.player.lateral + coneWidth);
     const cone = ctx.createLinearGradient(start.x, start.y, end.x, end.y);
-    cone.addColorStop(0, lockTarget ? "rgba(255, 241, 118, 0.24)" : "rgba(74, 216, 255, 0.16)");
+    cone.addColorStop(0, lockTarget ? "rgba(255, 218, 104, 0.18)" : "rgba(255, 235, 177, 0.08)");
     cone.addColorStop(1, "rgba(255, 255, 255, 0)");
     ctx.fillStyle = cone;
     ctx.setLineDash([]);
@@ -729,11 +835,11 @@ export class Renderer {
     ctx.fill();
 
     if (lockTarget) {
-      for (let ring = 0; ring < 3; ring += 1) {
-        const amount = (state.frame * 0.04 + ring / 3) % 1;
+      for (let ring = 0; ring < 2; ring += 1) {
+        const amount = (state.frame * 0.035 + ring / 2) % 1;
         const point = this.project(state, camera, state.player.progress + 98 + amount * 185, state.player.lateral);
         ctx.globalAlpha = 1 - amount;
-        ctx.strokeStyle = "#fff176";
+        ctx.strokeStyle = "#ffd568";
         ctx.lineWidth = 2 * camera.scale;
         ctx.beginPath();
         ctx.arc(point.x, point.y, (10 + amount * 18) * camera.scale, 0, Math.PI * 2);
@@ -778,46 +884,46 @@ export class Renderer {
       const pulse = 0.5 + Math.sin((state.frame - hazard.startFrame) * 0.21) * 0.5;
       ctx.save();
       ctx.translate(point.x, point.y);
-      ctx.globalAlpha = active ? 0.94 : 0.38;
-      ctx.fillStyle = active ? "rgba(255, 80, 116, 0.24)" : "rgba(255, 241, 118, 0.16)";
-      ctx.strokeStyle = active ? "#ff5d75" : "rgba(255, 255, 255, 0.42)";
-      ctx.lineWidth = 3.5 * camera.scale;
+      ctx.globalAlpha = active ? 0.88 : 0.28;
+      ctx.fillStyle = active ? "rgba(255, 195, 83, 0.18)" : "rgba(255, 232, 150, 0.1)";
+      ctx.strokeStyle = active ? "#e59b43" : "rgba(255, 235, 176, 0.32)";
+      ctx.lineWidth = 2.5 * camera.scale;
       ctx.beginPath();
-      ctx.arc(0, 0, (42 + pulse * 6) * camera.scale, 0, Math.PI * 2);
+      ctx.arc(0, 0, (34 + pulse * 4) * camera.scale, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = "#10253d";
-      ctx.strokeStyle = "#f7fbff";
+      ctx.fillStyle = "#6f3f25";
+      ctx.strokeStyle = "#ffe6a1";
       ctx.lineWidth = 3 * camera.scale;
       ctx.beginPath();
-      ctx.arc(0, 0, 13 * camera.scale, 0, Math.PI * 2);
+      ctx.arc(0, 0, 12 * camera.scale, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
       ctx.save();
-      ctx.rotate(state.frame * 0.15 + hazard.id);
+      ctx.rotate(Math.sin(state.frame * 0.14 + hazard.id) * 0.45);
       ctx.lineCap = "round";
-      ctx.strokeStyle = active ? "#fff176" : "rgba(255, 255, 255, 0.62)";
-      ctx.lineWidth = 10 * camera.scale;
+      ctx.strokeStyle = active ? "#f6d67b" : "rgba(255, 230, 161, 0.5)";
+      ctx.lineWidth = 11 * camera.scale;
       ctx.beginPath();
-      ctx.moveTo(-42 * camera.scale, 0);
-      ctx.lineTo(42 * camera.scale, 0);
+      ctx.moveTo(-35 * camera.scale, 0);
+      ctx.lineTo(35 * camera.scale, 0);
       ctx.stroke();
-      ctx.strokeStyle = active ? "#ff5d75" : "rgba(255, 93, 117, 0.62)";
-      ctx.lineWidth = 5 * camera.scale;
-      ctx.setLineDash([10 * camera.scale, 8 * camera.scale]);
+      ctx.strokeStyle = active ? "#d86f46" : "rgba(216, 111, 70, 0.5)";
+      ctx.lineWidth = 4 * camera.scale;
+      ctx.setLineDash([8 * camera.scale, 8 * camera.scale]);
       ctx.beginPath();
-      ctx.moveTo(-39 * camera.scale, 0);
-      ctx.lineTo(39 * camera.scale, 0);
+      ctx.moveTo(-32 * camera.scale, 0);
+      ctx.lineTo(32 * camera.scale, 0);
       ctx.stroke();
       ctx.restore();
 
       if (active) {
-        ctx.strokeStyle = `rgba(255, 255, 255, ${0.48 + pulse * 0.38})`;
+        ctx.strokeStyle = `rgba(255, 230, 161, ${0.32 + pulse * 0.22})`;
         ctx.lineWidth = 2 * camera.scale;
         ctx.beginPath();
-        ctx.arc(0, 0, (55 + pulse * 11) * camera.scale, 0, Math.PI * 2);
+        ctx.arc(0, 0, (43 + pulse * 8) * camera.scale, 0, Math.PI * 2);
         ctx.stroke();
       }
       ctx.restore();
@@ -836,32 +942,32 @@ export class Renderer {
       }
 
       const bob = Math.sin(state.frame * 0.12 + pickup.id) * 4 * camera.scale;
-      const glowColor = pickup.kind === "boost" ? "rgba(57, 224, 255, 0.36)" : "rgba(154, 255, 129, 0.34)";
-      const color = pickup.kind === "boost" ? "#39e0ff" : "#9aff81";
+      const glowColor = pickup.kind === "boost" ? "rgba(80, 200, 235, 0.24)" : "rgba(255, 212, 106, 0.24)";
+      const color = pickup.kind === "boost" ? "#41c7e8" : "#ffd56a";
 
       ctx.save();
       ctx.translate(point.x, point.y + bob);
       ctx.rotate(Math.sin(state.frame * 0.025 + pickup.id) * 0.08);
       ctx.fillStyle = glowColor;
       ctx.beginPath();
-      ctx.arc(0, 0, 36 * camera.scale, 0, Math.PI * 2);
+      ctx.arc(0, 0, 30 * camera.scale, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 3 * camera.scale;
-      ctx.setLineDash([8 * camera.scale, 7 * camera.scale]);
-      ctx.lineDashOffset = -state.frame * 0.7;
+      ctx.lineWidth = 2.2 * camera.scale;
+      ctx.setLineDash([7 * camera.scale, 9 * camera.scale]);
+      ctx.lineDashOffset = -state.frame * 0.45;
       ctx.beginPath();
-      ctx.arc(0, 0, 29 * camera.scale, 0, Math.PI * 2);
+      ctx.arc(0, 0, 24 * camera.scale, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
-      const gem = ctx.createRadialGradient(-7 * camera.scale, -8 * camera.scale, 2, 0, 0, 24 * camera.scale);
+      const gem = ctx.createRadialGradient(-7 * camera.scale, -8 * camera.scale, 2, 0, 0, 22 * camera.scale);
       gem.addColorStop(0, "#ffffff");
       gem.addColorStop(0.25, color);
-      gem.addColorStop(1, pickup.kind === "boost" ? "#146bba" : "#18845e");
+      gem.addColorStop(1, pickup.kind === "boost" ? "#217eaf" : "#9a7029");
       ctx.fillStyle = gem;
-      ctx.strokeStyle = "#ffffff";
+      ctx.strokeStyle = "#fff4cb";
       ctx.lineWidth = 3 * camera.scale;
-      this.drawHex(ctx, 0, 0, 23 * camera.scale);
+      this.drawHex(ctx, 0, 0, 21 * camera.scale);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = "#10253d";
@@ -888,17 +994,19 @@ export class Renderer {
       const wobble = Math.sin(state.frame * 0.16 + obstacle.id * 1.7);
       const juicedPoint = {
         x: point.x + wobble * (obstacle.kind === "cone" ? 2.4 : 0.8) * camera.scale,
-        y: point.y + Math.abs(wobble) * (obstacle.kind === "barrel" ? 2.8 : 1.2) * camera.scale
+        y: point.y + Math.abs(wobble) * (obstacle.kind === "cooler" ? 2.8 : 1.2) * camera.scale
       };
 
       if (obstacle.kind === "cone") {
         this.drawCone(ctx, juicedPoint, camera.scale, obstacle.collided, wobble * 0.08);
-      } else if (obstacle.kind === "barrel") {
-        this.drawBarrel(ctx, juicedPoint, camera.scale, obstacle.collided);
-      } else if (obstacle.kind === "oil") {
-        this.drawOil(ctx, juicedPoint, camera.scale, state.frame, obstacle.id);
+      } else if (obstacle.kind === "cooler") {
+        this.drawCooler(ctx, juicedPoint, camera.scale, obstacle.collided, obstacle.clearable);
+      } else if (obstacle.kind === "mud") {
+        this.drawMud(ctx, juicedPoint, camera.scale, state.frame, obstacle.id);
+      } else if (obstacle.kind === "log") {
+        this.drawLog(ctx, juicedPoint, camera.scale, obstacle.collided);
       } else {
-        this.drawGate(ctx, juicedPoint, camera.scale, obstacle.collided);
+        this.drawBarricade(ctx, juicedPoint, camera.scale, obstacle.collided, obstacle.clearable);
       }
     }
   }
@@ -1153,27 +1261,27 @@ export class Renderer {
 
     ctx.save();
     const panel = ctx.createLinearGradient(0, top, 0, top + 102);
-    panel.addColorStop(0, "rgba(15, 33, 74, 0.9)");
-    panel.addColorStop(0.62, "rgba(8, 17, 38, 0.78)");
-    panel.addColorStop(1, "rgba(8, 17, 38, 0.62)");
+    panel.addColorStop(0, "rgba(72, 48, 32, 0.9)");
+    panel.addColorStop(0.62, "rgba(42, 30, 24, 0.78)");
+    panel.addColorStop(1, "rgba(42, 30, 24, 0.58)");
     ctx.fillStyle = panel;
     this.roundRect(ctx, panelX, top, width, 102, 18);
     ctx.fill();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+    ctx.strokeStyle = "rgba(255, 230, 161, 0.26)";
     ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+    ctx.fillStyle = "rgba(255, 230, 161, 0.13)";
     this.roundRect(ctx, panelX + 10, top + 8, width - 20, 12, 6);
     ctx.fill();
 
-    this.drawHudMetric(ctx, panelX + 15, top + 20, "TIME", `${elapsed.toFixed(1)}s`, "#fff176");
+    this.drawHudMetric(ctx, panelX + 15, top + 20, "TIME", `${elapsed.toFixed(1)}s`, "#f6d67b");
     this.drawHudMetric(
       ctx,
       panelX + 15 + metricWidth,
       top + 20,
       "CANNON",
       state.cannonCooldown > 0 ? `${Math.ceil((state.cannonCooldown / 60) * 10) / 10}s` : "READY",
-      "#39e0ff"
+      "#41c7e8"
     );
     this.drawHudMetric(
       ctx,
@@ -1181,24 +1289,24 @@ export class Renderer {
       top + 20,
       "HITS/CLEAR",
       `${state.stats.cannonHits}/${state.stats.obstaclesCleared}`,
-      "#9aff81"
+      "#a8e06f"
     );
 
     ctx.fillStyle = "rgba(255, 255, 255, 0.16)";
     this.roundRect(ctx, panelX + 15, top + 77, width - 135, 10, 5);
     ctx.fill();
     const progressGradient = ctx.createLinearGradient(panelX + 15, 0, panelX + width - 120, 0);
-    progressGradient.addColorStop(0, "#fff176");
-    progressGradient.addColorStop(0.58, "#9aff81");
-    progressGradient.addColorStop(1, "#39e0ff");
+    progressGradient.addColorStop(0, "#f6d67b");
+    progressGradient.addColorStop(0.58, "#a8e06f");
+    progressGradient.addColorStop(1, "#41c7e8");
     ctx.fillStyle = progressGradient;
     this.roundRect(ctx, panelX + 15, top + 77, (width - 135) * progress, 10, 5);
     ctx.fill();
 
-    ctx.fillStyle = "rgba(57, 224, 255, 0.22)";
+    ctx.fillStyle = "rgba(65, 199, 232, 0.2)";
     this.roundRect(ctx, panelX + 15 + metricWidth, top + 49, 62, 6, 3);
     ctx.fill();
-    ctx.fillStyle = "#39e0ff";
+    ctx.fillStyle = "#41c7e8";
     this.roundRect(ctx, panelX + 15 + metricWidth, top + 49, 62 * cooldownProgress, 6, 3);
     ctx.fill();
 
@@ -1290,7 +1398,7 @@ export class Renderer {
     this.roundRect(ctx, x, y, 45, 26, 13);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = kind === "boost" ? "#39e0ff" : "#9aff81";
+    ctx.fillStyle = kind === "boost" ? "#41c7e8" : "#ffd56a";
     if (kind === "boost") {
       this.drawBolt(ctx, x + 13, y + 13, 0.45);
     } else {
@@ -1515,8 +1623,8 @@ export class Renderer {
 
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = "rgba(8, 17, 38, 0.72)";
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+      ctx.fillStyle = "rgba(57, 39, 28, 0.72)";
+      ctx.strokeStyle = "rgba(255, 230, 161, 0.24)";
       ctx.lineWidth = 1.5;
       this.roundRect(ctx, x, y, width, 34, 17);
       ctx.fill();
@@ -1525,7 +1633,7 @@ export class Renderer {
       ctx.font = `900 12px ${HUD_FONT}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("Line up, fire, grab boost & shield", this.viewport.width / 2, y + 17);
+      ctx.fillText("Line up, pop blockers, grab boosts", this.viewport.width / 2, y + 17);
       ctx.restore();
       return;
     }
@@ -1538,24 +1646,24 @@ export class Renderer {
     ctx.save();
     ctx.globalAlpha = clamp(alpha, 0, 1);
     const panel = ctx.createLinearGradient(x, y, x + width, y + 84);
-    panel.addColorStop(0, "rgba(23, 43, 100, 0.84)");
-    panel.addColorStop(1, "rgba(8, 17, 38, 0.7)");
+    panel.addColorStop(0, "rgba(88, 58, 34, 0.84)");
+    panel.addColorStop(1, "rgba(39, 30, 24, 0.72)");
     ctx.fillStyle = panel;
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
+    ctx.strokeStyle = "rgba(255, 230, 161, 0.22)";
     ctx.lineWidth = 2;
     this.roundRect(ctx, x, y, width, 84, 20);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = "#fff176";
+    ctx.fillStyle = "#f6d67b";
     ctx.font = `900 18px ${HUD_FONT}`;
     ctx.textAlign = "center";
-    ctx.fillText("Cannon Cart: AsymSprint", this.viewport.width / 2, y + 26);
+    ctx.fillText("Camp Wobblewood Rally", this.viewport.width / 2, y + 26);
 
-    const lines = ["Steer to line up", "Fire to clear", "Grab boost & shield"];
+    const lines = ["Steer to line up", "Fire to pop blockers", "Grab boost & shield"];
     ctx.font = `800 13px ${HUD_FONT}`;
     lines.forEach((line, index) => {
       const chipY = y + 46 + index * 15;
-      ctx.fillStyle = index === 0 ? "#39e0ff" : index === 1 ? "#ff8aa0" : "#9aff81";
+      ctx.fillStyle = index === 0 ? "#41c7e8" : index === 1 ? "#ef6e57" : "#ffd56a";
       ctx.beginPath();
       ctx.arc(x + 43, chipY - 4, 4, 0, Math.PI * 2);
       ctx.fill();
@@ -1581,31 +1689,35 @@ export class Renderer {
     this.drawResultMood(ctx, outcome, panelX, panelY, panelWidth, state.frame, result.checksum);
 
     const card = ctx.createLinearGradient(panelX, panelY, panelX + panelWidth, panelY + panelHeight);
-    card.addColorStop(0, "#ffffff");
-    card.addColorStop(0.54, "#f7fbff");
-    card.addColorStop(1, "#dff7ff");
+    card.addColorStop(0, "#fff8e6");
+    card.addColorStop(0.54, "#fff4d8");
+    card.addColorStop(1, "#e8f5d6");
     ctx.fillStyle = card;
     this.roundRect(ctx, panelX, panelY, panelWidth, panelHeight, 26);
     ctx.fill();
-    ctx.strokeStyle = "#10253d";
+    ctx.strokeStyle = "#4a321f";
     ctx.lineWidth = 4;
     ctx.stroke();
 
-    ctx.fillStyle = result.outcome === "win" ? "rgba(154, 255, 129, 0.24)" : "rgba(255, 93, 117, 0.2)";
+    ctx.fillStyle = result.outcome === "win" ? "rgba(168, 224, 111, 0.28)" : "rgba(239, 110, 87, 0.18)";
     this.roundRect(ctx, panelX + 18, panelY + 18, panelWidth - 36, 62, 20);
     ctx.fill();
 
-    ctx.fillStyle = result.outcome === "win" ? "#14895d" : "#d74365";
+    ctx.fillStyle = result.outcome === "win" ? "#2f7e5b" : "#c8463d";
     ctx.font = `900 44px ${HUD_FONT}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
     ctx.fillText(result.outcome === "win" ? "WIN" : "LOSS", this.viewport.width / 2, panelY + 61);
 
-    ctx.fillStyle = "#10253d";
-    ctx.font = `900 14px ${HUD_FONT}`;
-    ctx.fillText(quip, this.viewport.width / 2, panelY + 101);
+    ctx.fillStyle = "#2d2117";
+    ctx.font = `900 13px ${HUD_FONT}`;
+    const quipLines = this.getWrappedLines(ctx, quip, panelWidth - 58).slice(0, 3);
+    const quipStartY = panelY + (quipLines.length > 1 ? 94 : 101);
+    quipLines.forEach((line, index) => {
+      ctx.fillText(line, this.viewport.width / 2, quipStartY + index * 15);
+    });
 
-    ctx.fillStyle = "#10253d";
+    ctx.fillStyle = "#2d2117";
     ctx.font = `800 15px ${HUD_FONT}`;
     ctx.fillText("Tap to run it back / Press R", this.viewport.width / 2, panelY + panelHeight - 28);
 
@@ -1617,10 +1729,33 @@ export class Renderer {
       ["CHECKSUM", result.checksum, "stable result"]
     ];
 
+    const rowsStartY = panelY + 121 + Math.max(0, quipLines.length - 1) * 12;
     rows.forEach((row, index) => {
-      this.drawResultRow(ctx, panelX + 24, panelY + 121 + index * 47, panelWidth - 48, row[0], row[1], row[2]);
+      this.drawResultRow(ctx, panelX + 24, rowsStartY + index * 47, panelWidth - 48, row[0], row[1], row[2]);
     });
     ctx.restore();
+  }
+
+  private getWrappedLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+    const words = text.split(" ");
+    const lines: string[] = [];
+    let current = "";
+
+    for (const word of words) {
+      const next = current ? `${current} ${word}` : word;
+      if (ctx.measureText(next).width <= maxWidth || !current) {
+        current = next;
+      } else {
+        lines.push(current);
+        current = word;
+      }
+    }
+
+    if (current) {
+      lines.push(current);
+    }
+
+    return lines;
   }
 
   private drawResultMood(
@@ -1804,66 +1939,101 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawBarrel(ctx: CanvasRenderingContext2D, point: Point, scale: number, faded: boolean): void {
+  private drawCooler(ctx: CanvasRenderingContext2D, point: Point, scale: number, faded: boolean, clearable: boolean): void {
     ctx.save();
     ctx.globalAlpha = faded ? 0.34 : 1;
-    this.drawSquashShadow(ctx, point.x, point.y + 20 * scale, 30 * scale, 8 * scale);
-    const gradient = ctx.createLinearGradient(point.x - 20 * scale, point.y, point.x + 20 * scale, point.y);
-    gradient.addColorStop(0, "#902d49");
-    gradient.addColorStop(0.5, "#ff536e");
-    gradient.addColorStop(1, "#8d2440");
+    this.drawSquashShadow(ctx, point.x, point.y + 18 * scale, 31 * scale, 8 * scale);
+    const gradient = ctx.createLinearGradient(point.x - 22 * scale, point.y, point.x + 22 * scale, point.y);
+    gradient.addColorStop(0, "#247ea8");
+    gradient.addColorStop(0.5, "#53c6e8");
+    gradient.addColorStop(1, "#1e6f94");
     ctx.fillStyle = gradient;
-    ctx.strokeStyle = "#4a172b";
+    ctx.strokeStyle = "#14384a";
     ctx.lineWidth = 3 * scale;
-    this.roundRect(ctx, point.x - 20 * scale, point.y - 25 * scale, 40 * scale, 50 * scale, 12 * scale);
+    this.roundRect(ctx, point.x - 23 * scale, point.y - 20 * scale, 46 * scale, 40 * scale, 10 * scale);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = "#fff176";
-    this.roundRect(ctx, point.x - 18 * scale, point.y - 7 * scale, 36 * scale, 7 * scale, 4 * scale);
+    ctx.fillStyle = "#fff1b1";
+    this.roundRect(ctx, point.x - 20 * scale, point.y - 18 * scale, 40 * scale, 8 * scale, 4 * scale);
     ctx.fill();
-    ctx.fillStyle = "rgba(255, 255, 255, 0.38)";
-    this.roundRect(ctx, point.x - 11 * scale, point.y - 18 * scale, 7 * scale, 25 * scale, 4 * scale);
-    ctx.fill();
-    ctx.fillStyle = "#6b2035";
+    ctx.strokeStyle = "#14384a";
+    ctx.lineWidth = 3 * scale;
     ctx.beginPath();
-    ctx.ellipse(point.x, point.y - 24 * scale, 18 * scale, 6 * scale, 0, 0, Math.PI * 2);
+    ctx.arc(point.x, point.y - 15 * scale, 13 * scale, Math.PI, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.42)";
+    this.roundRect(ctx, point.x - 14 * scale, point.y - 4 * scale, 8 * scale, 15 * scale, 4 * scale);
     ctx.fill();
+    if (clearable) {
+      this.drawPopBand(ctx, point.x, point.y + 4 * scale, scale);
+    }
     ctx.restore();
   }
 
-  private drawOil(ctx: CanvasRenderingContext2D, point: Point, scale: number, frame: number, id: number): void {
+  private drawMud(ctx: CanvasRenderingContext2D, point: Point, scale: number, frame: number, id: number): void {
     ctx.save();
     this.drawSquashShadow(ctx, point.x, point.y + 10 * scale, 36 * scale, 8 * scale);
-    ctx.fillStyle = "rgba(7, 10, 22, 0.88)";
-    ctx.strokeStyle = "#694cff";
+    ctx.fillStyle = "rgba(82, 52, 35, 0.88)";
+    ctx.strokeStyle = "#3f2a1f";
     ctx.lineWidth = 2.5 * scale;
     ctx.beginPath();
     ctx.ellipse(point.x, point.y, 32 * scale, 18 * scale, -0.18, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     const shimmer = Math.sin(frame * 0.16 + id) * 0.5 + 0.5;
-    ctx.strokeStyle = `rgba(57, 224, 255, ${0.55 + shimmer * 0.28})`;
+    ctx.strokeStyle = `rgba(255, 216, 122, ${0.42 + shimmer * 0.18})`;
     ctx.lineWidth = 2 * scale;
     ctx.beginPath();
     ctx.ellipse(point.x - 4 * scale, point.y - 3 * scale, 18 * scale, 7 * scale, -0.25, 0, Math.PI * 1.65);
     ctx.stroke();
-    ctx.fillStyle = "rgba(255, 138, 160, 0.32)";
+    ctx.fillStyle = "rgba(255, 226, 150, 0.24)";
     ctx.beginPath();
     ctx.ellipse(point.x + 10 * scale, point.y + 3 * scale, 8 * scale, 4 * scale, -0.2, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 
-  private drawGate(ctx: CanvasRenderingContext2D, point: Point, scale: number, faded: boolean): void {
+  private drawLog(ctx: CanvasRenderingContext2D, point: Point, scale: number, faded: boolean): void {
+    ctx.save();
+    ctx.globalAlpha = faded ? 0.34 : 1;
+    this.drawSquashShadow(ctx, point.x, point.y + 17 * scale, 40 * scale, 8 * scale);
+    ctx.translate(point.x, point.y);
+    ctx.rotate(0.08);
+    const log = ctx.createLinearGradient(-37 * scale, 0, 37 * scale, 0);
+    log.addColorStop(0, "#6e3f26");
+    log.addColorStop(0.5, "#b36a3f");
+    log.addColorStop(1, "#5c351f");
+    ctx.fillStyle = log;
+    ctx.strokeStyle = "#3f291d";
+    ctx.lineWidth = 3 * scale;
+    this.roundRect(ctx, -39 * scale, -15 * scale, 78 * scale, 30 * scale, 14 * scale);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#e7b36b";
+    ctx.beginPath();
+    ctx.arc(-29 * scale, 0, 12 * scale, 0, Math.PI * 2);
+    ctx.arc(29 * scale, 0, 12 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(70, 45, 28, 0.52)";
+    ctx.lineWidth = 2 * scale;
+    ctx.beginPath();
+    ctx.arc(-29 * scale, 0, 6 * scale, 0, Math.PI * 2);
+    ctx.arc(29 * scale, 0, 6 * scale, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawBarricade(ctx: CanvasRenderingContext2D, point: Point, scale: number, faded: boolean, clearable: boolean): void {
     ctx.save();
     ctx.globalAlpha = faded ? 0.34 : 1;
     this.drawSquashShadow(ctx, point.x, point.y + 18 * scale, 48 * scale, 8 * scale);
     ctx.translate(point.x, point.y);
     ctx.rotate(-0.05);
     const body = ctx.createLinearGradient(-40 * scale, -16 * scale, 40 * scale, 16 * scale);
-    body.addColorStop(0, "#f8fbff");
-    body.addColorStop(0.5, "#fff176");
-    body.addColorStop(1, "#f8fbff");
+    body.addColorStop(0, "#ffe6a1");
+    body.addColorStop(0.5, "#f3c761");
+    body.addColorStop(1, "#ffe6a1");
     ctx.fillStyle = body;
     ctx.strokeStyle = "#13243d";
     ctx.lineWidth = 3 * scale;
@@ -1871,7 +2041,7 @@ export class Renderer {
     ctx.fill();
     ctx.stroke();
     for (let index = -3; index <= 3; index += 1) {
-      ctx.strokeStyle = index % 2 === 0 ? "#ff536e" : "#ffb35c";
+      ctx.strokeStyle = index % 2 === 0 ? "#d86f46" : "#fff1b1";
       ctx.lineWidth = 8 * scale;
       ctx.beginPath();
       ctx.moveTo((index * 13 - 7) * scale, -14 * scale);
@@ -1883,6 +2053,26 @@ export class Renderer {
     ctx.arc(-34 * scale, 0, 7 * scale, 0, Math.PI * 2);
     ctx.arc(34 * scale, 0, 7 * scale, 0, Math.PI * 2);
     ctx.fill();
+    if (clearable) {
+      this.drawPopBand(ctx, 0, 0, scale);
+    }
+    ctx.restore();
+  }
+
+  private drawPopBand(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number): void {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = "#fff8d7";
+    ctx.strokeStyle = "#3f291d";
+    ctx.lineWidth = 2 * scale;
+    this.roundRect(ctx, -18 * scale, -9 * scale, 36 * scale, 18 * scale, 9 * scale);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#d86f46";
+    ctx.font = `900 ${8 * scale}px ${HUD_FONT}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("POP", 0, 0);
     ctx.restore();
   }
 
@@ -1900,9 +2090,9 @@ export class Renderer {
     ctx.globalAlpha = tagged ? 0.65 + Math.sin(frame * 0.5) * 0.16 : 1;
     this.drawCartShadow(ctx, size / PLAYER_RADIUS);
     const rivalBody = ctx.createLinearGradient(-size, -size * 1.2, size, size * 1.2);
-    rivalBody.addColorStop(0, "#d8b8ff");
-    rivalBody.addColorStop(0.38, "#8e6bff");
-    rivalBody.addColorStop(1, "#4f38b5");
+    rivalBody.addColorStop(0, "#ffe08b");
+    rivalBody.addColorStop(0.38, "#e58a3d");
+    rivalBody.addColorStop(1, "#8d4a28");
     ctx.fillStyle = rivalBody;
     ctx.strokeStyle = "#13243d";
     ctx.lineWidth = 3;
@@ -1918,12 +2108,16 @@ export class Renderer {
     ctx.fill();
     this.roundRect(ctx, size * 0.66, size * 0.38, size * 0.32, size * 0.52, 4);
     ctx.fill();
-    ctx.fillStyle = "#f4d9ff";
+    ctx.fillStyle = "#245f49";
     ctx.beginPath();
     ctx.moveTo(0, -size * 1.24);
     ctx.lineTo(size * 0.5, -size * 0.28);
     ctx.lineTo(-size * 0.5, -size * 0.28);
     ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#ffe08b";
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.64, size * 0.18, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = "#13243d";
     ctx.lineWidth = 3;
@@ -1932,7 +2126,7 @@ export class Renderer {
     ctx.lineTo(size * 0.42, size * 0.62);
     ctx.stroke();
     if (tagged) {
-      ctx.strokeStyle = "#fff176";
+      ctx.strokeStyle = "#ffd568";
       ctx.lineWidth = 2.5;
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
@@ -1964,10 +2158,10 @@ export class Renderer {
     ctx.stroke();
 
     const body = ctx.createLinearGradient(-25 * scale, -34 * scale, 25 * scale, 34 * scale);
-    body.addColorStop(0, "#ffd76f");
-    body.addColorStop(0.3, "#ff6d85");
-    body.addColorStop(0.72, "#dc315f");
-    body.addColorStop(1, "#8c2548");
+    body.addColorStop(0, "#ffe08b");
+    body.addColorStop(0.3, "#ef6e57");
+    body.addColorStop(0.72, "#c8463d");
+    body.addColorStop(1, "#78342d");
     ctx.fillStyle = body;
     ctx.strokeStyle = "#13243d";
     ctx.lineWidth = 3.5 * scale;
@@ -1978,9 +2172,19 @@ export class Renderer {
     ctx.fillStyle = "#10253d";
     this.roundRect(ctx, -17 * scale, 13 * scale, 34 * scale, 10 * scale, 5 * scale);
     ctx.fill();
-    ctx.fillStyle = "#fff176";
+    ctx.fillStyle = "#f6d67b";
     this.roundRect(ctx, -10 * scale, 16 * scale, 20 * scale, 4 * scale, 2 * scale);
     ctx.fill();
+    ctx.fillStyle = "#2f7e5b";
+    ctx.beginPath();
+    ctx.moveTo(9 * scale, -18 * scale);
+    ctx.lineTo(23 * scale, -13 * scale);
+    ctx.lineTo(9 * scale, -8 * scale);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#fff1b1";
+    ctx.lineWidth = 1.8 * scale;
+    ctx.stroke();
     ctx.fillStyle = "rgba(255, 255, 255, 0.38)";
     this.roundRect(ctx, -14 * scale, -27 * scale, 28 * scale, 13 * scale, 7 * scale);
     ctx.fill();
@@ -1994,7 +2198,7 @@ export class Renderer {
     ctx.beginPath();
     ctx.arc(0, 8 * scale, 14 * scale, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = "#29f6df";
+    ctx.strokeStyle = "#f6d67b";
     ctx.lineWidth = 2 * scale;
     ctx.stroke();
     ctx.strokeStyle = "#13243d";
@@ -2004,19 +2208,19 @@ export class Renderer {
     ctx.moveTo(0, 7 * scale);
     ctx.lineTo(0, -37 * scale);
     ctx.stroke();
-    ctx.strokeStyle = "#f7fbff";
+    ctx.strokeStyle = "#fff1b1";
     ctx.lineWidth = 5 * scale;
     ctx.beginPath();
     ctx.moveTo(0, 5 * scale);
     ctx.lineTo(0, -34 * scale);
     ctx.stroke();
-    ctx.fillStyle = "#39e0ff";
+    ctx.fillStyle = "#41c7e8";
     ctx.beginPath();
     ctx.arc(0, 8 * scale, 6.5 * scale, 0, Math.PI * 2);
     ctx.fill();
 
     if (recoil > 0) {
-      ctx.fillStyle = `rgba(255, 241, 118, ${recoil})`;
+      ctx.fillStyle = `rgba(255, 213, 104, ${recoil})`;
       ctx.beginPath();
       ctx.moveTo(0, -48 * scale);
       ctx.lineTo(-11 * scale * recoil, -28 * scale);
@@ -2170,15 +2374,19 @@ function colorForObstacle(kind: ObstacleKind): string {
     return "#ffb35c";
   }
 
-  if (kind === "barrel") {
-    return "#ff536e";
+  if (kind === "cooler") {
+    return "#41c7e8";
   }
 
-  if (kind === "gate") {
-    return "#fff176";
+  if (kind === "barricade") {
+    return "#f3c761";
   }
 
-  return "#39e0ff";
+  if (kind === "log") {
+    return "#b36a3f";
+  }
+
+  return "#8b5a3c";
 }
 
 function indexColor(label: string): string {

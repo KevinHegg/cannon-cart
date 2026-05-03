@@ -10,7 +10,7 @@ type AudioContextConstructor = new () => AudioContext;
 type OscillatorKind = OscillatorType;
 
 const STORAGE_KEY = "cannon-cart-muted";
-const MASTER_VOLUME = 0.28;
+const MASTER_VOLUME = 0.24;
 
 export class GameAudio {
   private context: AudioContext | null = null;
@@ -200,7 +200,8 @@ export class GameAudio {
   }
 
   private tap(now: number): void {
-    this.tone(now, 620, 0.045, "triangle", 0.08, 920);
+    this.tone(now, 420, 0.035, "triangle", 0.07, 620);
+    this.noise(now, 0.025, 0.014, 1200);
   }
 
   private runStart(now: number): void {
@@ -215,10 +216,10 @@ export class GameAudio {
   }
 
   private fire(now: number): void {
-    this.tone(now, 95, 0.12, "sine", 0.12, 58);
-    this.tone(now + 0.02, 260, 0.07, "square", 0.08, 130);
-    this.noise(now, 0.08, 0.055, 720);
-    this.tone(now + 0.055, 820, 0.08, "triangle", 0.055, 1320);
+    this.tone(now, 120, 0.1, "sine", 0.09, 70);
+    this.tone(now + 0.015, 330, 0.055, "square", 0.065, 180);
+    this.noise(now, 0.065, 0.042, 640);
+    this.tone(now + 0.052, 760, 0.07, "triangle", 0.045, 1280);
   }
 
   private ready(now: number): void {
@@ -227,13 +228,15 @@ export class GameAudio {
   }
 
   private pickupBoost(now: number): void {
-    this.tone(now, 520, 0.07, "triangle", 0.055, 780);
-    this.tone(now + 0.07, 880, 0.08, "sine", 0.05, 1320);
+    this.noise(now, 0.07, 0.02, 2400);
+    this.tone(now, 540, 0.06, "triangle", 0.045, 810);
+    this.tone(now + 0.065, 900, 0.075, "sine", 0.042, 1360);
   }
 
   private pickupShield(now: number): void {
-    this.tone(now, 440, 0.1, "sine", 0.045, 660);
-    this.tone(now + 0.045, 880, 0.13, "triangle", 0.034, 1180);
+    this.tone(now, 390, 0.09, "sine", 0.038, 620);
+    this.tone(now + 0.048, 760, 0.12, "triangle", 0.034, 1120);
+    this.tone(now + 0.1, 1320, 0.05, "sine", 0.025, 1560);
   }
 
   private boost(now: number): void {
@@ -249,14 +252,15 @@ export class GameAudio {
   }
 
   private bonk(now: number): void {
-    this.tone(now, 160, 0.12, "triangle", 0.09, 82);
-    this.noise(now, 0.075, 0.04, 420);
+    this.tone(now, 150, 0.11, "triangle", 0.075, 78);
+    this.noise(now, 0.085, 0.035, 360);
+    this.tone(now + 0.045, 260, 0.07, "sine", 0.035, 190);
   }
 
   private pop(now: number): void {
-    this.tone(now, 320, 0.055, "square", 0.065, 700);
-    this.noise(now, 0.09, 0.04, 1400);
-    this.tone(now + 0.05, 900, 0.06, "triangle", 0.04, 1350);
+    this.tone(now, 280, 0.05, "square", 0.055, 620);
+    this.noise(now, 0.07, 0.034, 1200);
+    this.tone(now + 0.045, 820, 0.055, "triangle", 0.036, 1260);
   }
 
   private zap(now: number): void {
@@ -265,9 +269,9 @@ export class GameAudio {
   }
 
   private win(now: number): void {
-    this.tone(now, 523.25, 0.09, "triangle", 0.06, 659.25);
-    this.tone(now + 0.09, 659.25, 0.09, "triangle", 0.06, 783.99);
-    this.tone(now + 0.18, 880, 0.17, "sine", 0.07, 1174.66);
+    this.tone(now, 392, 0.08, "triangle", 0.052, 523.25);
+    this.tone(now + 0.08, 523.25, 0.08, "triangle", 0.052, 659.25);
+    this.tone(now + 0.16, 783.99, 0.14, "sine", 0.06, 1046.5);
   }
 
   private loss(now: number): void {

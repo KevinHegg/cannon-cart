@@ -29,10 +29,10 @@ export interface GameEvent {
   outcome?: GameOutcome;
 }
 
-const CLEAR_CALLOUTS = ["POOF!", "CLEAR!", "BOOP!", "NOPE!"];
-const HIT_CALLOUTS = ["BONK!", "OOPS!", "NOPE!"];
-const SHIELD_CALLOUTS = ["BOING!", "NOPE!", "ZING!"];
-const RIVAL_CALLOUTS = ["ZAP!", "TAG!", "BOOP!"];
+const CLEAR_CALLOUTS = ["POP!", "CLEAR!", "PLOP!"];
+const HIT_CALLOUTS = ["BONK!", "OOPS!", "THUNK!"];
+const SHIELD_CALLOUTS = ["BOING!", "SAFE!", "PING!"];
+const RIVAL_CALLOUTS = ["ZAP!", "TAG!", "POP!"];
 
 export function collectGameEvents(previous: GameState, next: GameState, input: FrameInput): GameEvent[] {
   const events: GameEvent[] = [];

@@ -2,17 +2,17 @@ import { hashStringToUint32, mixUint32 } from "../sim/rng";
 import { ResultBlob } from "./checksum";
 
 const WIN_LINES = [
-  "You out-booped the road.",
-  "Cannon cart diplomacy worked.",
-  "The cones never saw it coming.",
-  "A tidy sprint with extra kaboom."
+  "Camp Wobblewood salutes your questionable driving.",
+  "The marshmallow barrels never stood a chance.",
+  "You earned a tiny cannon badge.",
+  "Picnic panic successfully avoided."
 ];
 
 const LOSS_LINES = [
-  "The cones voted no.",
-  "A brave sprint, a rude road.",
-  "Almost heroic. Mostly sideways.",
-  "The road filed a tiny complaint."
+  "The cones formed a committee.",
+  "A noble sprint. A rude cooler.",
+  "Camp Wobblewood requests fewer bonks.",
+  "Almost heroic. Mostly sideways."
 ];
 
 export function getResultQuip(result: ResultBlob): string {

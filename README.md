@@ -1,6 +1,8 @@
 # Cannon Cart: AsymSprint
 
-Portrait-first TypeScript Canvas 2D prototype for a deterministic 8-12 second arcade cannon-cart sprint.
+Portrait-first TypeScript Canvas 2D prototype for a deterministic 8-12 second arcade cannon-cart sprint set in **Camp Wobblewood**, an original cartoon campground and picnic-derby world.
+
+The current run is paced around readable moments: steer through a quiet intro, line up the roof cannon for a few clearable blockers, grab a useful pickup, dodge a small number of camp props, and beat the rival to the finish.
 
 ## Run
 
