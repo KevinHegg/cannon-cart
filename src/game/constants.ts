@@ -38,9 +38,21 @@ export const SHOT_SPEED = 520;
 export const SHOT_RADIUS = 8;
 export const SHOT_MAX_AGE_FRAMES = 78;
 
-export const OBSTACLE_COUNT = 18;
-export const PICKUP_COUNT = 8;
-export const HAZARD_COUNT = 5;
+export const INTRO_SAFE_SECONDS = 1.35;
+export const INTRO_SAFE_PROGRESS = 340;
+export const DENSITY_LOOKAHEAD_PROGRESS = 360;
+export const MIN_CLUSTER_GAP = 285;
+export const MAX_VISIBLE_DANGEROUS_OBSTACLES = 2;
+export const MAX_VISIBLE_PICKUPS = 1;
+export const MAX_VISIBLE_MAJOR_PRESSURE = 1;
+export const TOTAL_DANGEROUS_MIN = 5;
+export const TOTAL_DANGEROUS_MAX = 7;
+export const TOTAL_PICKUP_MIN = 2;
+export const TOTAL_PICKUP_MAX = 3;
+export const CLEARABLE_BLOCKER_MIN = 2;
+export const CLEARABLE_BLOCKER_MAX = 3;
+export const MAJOR_HAZARD_MIN = 1;
+export const MAJOR_HAZARD_MAX = 2;
 
 export const CAMERA_LOOKAHEAD = 270;
 

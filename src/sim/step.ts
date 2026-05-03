@@ -193,7 +193,7 @@ function resolveObstacleHits(state: GameState): void {
 
     obstacle.collided = true;
     state.player.bumpFrames = PLAYER_BUMP_FRAMES;
-    state.player.speed = Math.max(92, state.player.speed * (obstacle.kind === "oil" ? 0.64 : 0.56));
+    state.player.speed = Math.max(92, state.player.speed * (obstacle.kind === "mud" ? 0.64 : 0.56));
     state.player.lateral += state.player.lateral >= obstacle.lateral ? 22 : -22;
     state.stats.obstaclesHit += 1;
   }

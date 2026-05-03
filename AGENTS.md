@@ -8,6 +8,8 @@ The desired game is an 8-12 second deterministic micro-racing encounter generate
 
 This is NOT a side-view artillery game. Do not build a slow cannon wagon on hills. Do not anchor a cannon cart at the bottom of the screen shooting at distant targets.
 
+The first locked world theme is **Camp Wobblewood**, an original cartoon campground, picnic-derby, toy-racing world with pine trees, cabins, picnic props, wooden rails, ponds, rope lights, banners, and silly camp signs.
+
 The core experience is:
 
 - A tiny vehicle races along a deterministic ribbon track.
@@ -58,7 +60,17 @@ MVP loop:
 - Mobile controls matter: drag left/right to steer and use on-screen fire/boost buttons.
 - Do not add React, Phaser, Three.js, Pixi, or a backend.
 - Do not implement Netlify, Apps Script, replay sharing, GIF sharing, or leaderboards until requested.
-- Do not copy Nintendo or Mario Kart intellectual property, characters, item designs, logos, UI motifs, or track motifs.
+- Do not copy protected intellectual property, characters, item designs, logos, UI motifs, or track motifs.
+
+## Readability And Pacing
+
+- Keep the board readable on a phone first.
+- The first 1.2-1.5 seconds should be a quiet intro with no immediate dangerous obstacle.
+- A run should feel like a few clear beats, not constant object spam.
+- Target 4-7 total dangerous objects, 2-3 cannon-clearable blockers, 2-3 pickups, and 1-2 major hazards.
+- In the forward lookahead, avoid showing more than 2 dangerous objects and 1 pickup at once.
+- Never block all practical lanes in one cluster; always preserve at least one clean path.
+- Prefer richer low-contrast campground scenery outside the track over more collidable objects.
 
 ## Architecture
 
