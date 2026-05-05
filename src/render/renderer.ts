@@ -10,8 +10,9 @@ import {
   PORTRAIT_WIDTH,
   RIVAL_RADIUS,
   SHOT_RADIUS,
+  STEER_ZONE_FULL_POWER_RATIO,
+  STEER_ZONE_TOP_RATIO,
   TOUCH_BOTTOM_MARGIN,
-  TOUCH_BUTTON_GAP,
   TOUCH_BUTTON_SIZE,
   TRACK_WIDTH
 } from "../game/constants";
@@ -306,11 +307,24 @@ export class Renderer {
 
   private project(state: GameState, camera: Camera, progress: number, lateral: number): Point {
     const worldX = getTrackCenterX(state.match, progress) + lateral;
+    const depthScale = this.getDepthScale(state, progress);
 
     return {
-      x: this.viewport.width / 2 + (worldX - camera.centerX) * camera.scale + camera.shakeX,
+      x: this.viewport.width / 2 + (worldX - camera.centerX) * camera.scale * depthScale + camera.shakeX,
       y: camera.playerY - (progress - state.player.progress) * camera.scale + camera.shakeY
     };
+  }
+
+  private getDepthScale(state: GameState, progress: number): number {
+    const lookahead = progress - state.player.progress;
+    const farAmount = smoothstep(clamp(lookahead / 760, 0, 1));
+    const nearBoost = clamp(-lookahead / 220, 0, 1) * 0.06;
+
+    return lerp(0.98 + nearBoost, 0.68, farAmount);
+  }
+
+  private getObjectScale(state: GameState, camera: Camera, progress: number, multiplier = 1): number {
+    return camera.scale * this.getDepthScale(state, progress) * multiplier;
   }
 
   private drawBackground(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
@@ -667,10 +681,10 @@ export class Renderer {
     const samples = this.visibleProgressSamples(state, 22);
     const left = samples.map((progress) => this.project(state, camera, progress, -TRACK_WIDTH / 2));
     const right = samples.map((progress) => this.project(state, camera, progress, TRACK_WIDTH / 2));
-    const innerLeft = samples.map((progress) => this.project(state, camera, progress, -TRACK_WIDTH / 2 + 18));
-    const innerRight = samples.map((progress) => this.project(state, camera, progress, TRACK_WIDTH / 2 - 18));
-    const surfaceLeft = samples.map((progress) => this.project(state, camera, progress, -TRACK_WIDTH / 2 + 31));
-    const surfaceRight = samples.map((progress) => this.project(state, camera, progress, TRACK_WIDTH / 2 - 31));
+    const innerLeft = samples.map((progress) => this.project(state, camera, progress, -TRACK_WIDTH / 2 + 20));
+    const innerRight = samples.map((progress) => this.project(state, camera, progress, TRACK_WIDTH / 2 - 20));
+    const surfaceLeft = samples.map((progress) => this.project(state, camera, progress, -TRACK_WIDTH / 2 + 34));
+    const surfaceRight = samples.map((progress) => this.project(state, camera, progress, TRACK_WIDTH / 2 - 34));
 
     ctx.save();
     ctx.translate(0, 18 * camera.scale);
@@ -679,35 +693,36 @@ export class Renderer {
     ctx.restore();
 
     const outer = ctx.createLinearGradient(0, 0, this.viewport.width, this.viewport.height);
-    outer.addColorStop(0, "#6f4a2d");
-    outer.addColorStop(0.48, "#8b6137");
-    outer.addColorStop(1, "#4f7a46");
+    outer.addColorStop(0, "#6d4229");
+    outer.addColorStop(0.44, "#a36f3d");
+    outer.addColorStop(1, "#5b8a4b");
     ctx.fillStyle = outer;
     this.fillRibbon(ctx, left, right);
 
     const bevel = ctx.createLinearGradient(this.viewport.width * 0.18, 0, this.viewport.width * 0.82, 0);
-    bevel.addColorStop(0, "#d99b54");
-    bevel.addColorStop(0.18, "#f0d47a");
-    bevel.addColorStop(0.82, "#f0d47a");
-    bevel.addColorStop(1, "#d99b54");
+    bevel.addColorStop(0, "#c87842");
+    bevel.addColorStop(0.15, "#f3d275");
+    bevel.addColorStop(0.5, "#ffe5a0");
+    bevel.addColorStop(0.85, "#f3d275");
+    bevel.addColorStop(1, "#c87842");
     ctx.fillStyle = bevel;
     this.fillRibbon(ctx, innerLeft, innerRight);
 
     const road = ctx.createLinearGradient(this.viewport.width * 0.2, 0, this.viewport.width * 0.84, 0);
-    road.addColorStop(0, "#6f594f");
-    road.addColorStop(0.24, "#7a6356");
-    road.addColorStop(0.5, "#8a7060");
-    road.addColorStop(0.78, "#7c6558");
-    road.addColorStop(1, "#604f48");
+    road.addColorStop(0, "#5f504a");
+    road.addColorStop(0.22, "#756158");
+    road.addColorStop(0.5, "#927565");
+    road.addColorStop(0.78, "#756158");
+    road.addColorStop(1, "#554844");
     ctx.fillStyle = road;
     this.fillRibbon(ctx, surfaceLeft, surfaceRight);
 
-    this.strokeTrackEdge(ctx, left, "rgba(75, 48, 30, 0.5)", 18 * camera.scale);
-    this.strokeTrackEdge(ctx, right, "rgba(75, 48, 30, 0.5)", 18 * camera.scale);
-    this.strokeTrackEdge(ctx, left, "#3b271b", 5 * camera.scale);
-    this.strokeTrackEdge(ctx, right, "#3b271b", 5 * camera.scale);
-    this.strokeTrackEdge(ctx, innerLeft, "#f6d67b", 7 * camera.scale);
-    this.strokeTrackEdge(ctx, innerRight, "#f6d67b", 7 * camera.scale);
+    this.strokeTrackEdge(ctx, left, "rgba(75, 48, 30, 0.54)", 20 * camera.scale);
+    this.strokeTrackEdge(ctx, right, "rgba(75, 48, 30, 0.54)", 20 * camera.scale);
+    this.strokeTrackEdge(ctx, left, "#3b271b", 6 * camera.scale);
+    this.strokeTrackEdge(ctx, right, "#3b271b", 6 * camera.scale);
+    this.strokeTrackEdge(ctx, innerLeft, "#f6d67b", 8 * camera.scale);
+    this.strokeTrackEdge(ctx, innerRight, "#f6d67b", 8 * camera.scale);
     this.strokeTrackEdge(ctx, surfaceLeft, "rgba(255, 240, 196, 0.22)", 3 * camera.scale);
     this.strokeTrackEdge(ctx, surfaceRight, "rgba(36, 24, 18, 0.24)", 3 * camera.scale);
   }
@@ -880,6 +895,7 @@ export class Renderer {
         continue;
       }
 
+      const scale = this.getObjectScale(state, camera, hazard.progress);
       const active = hazardIsActive(state, hazard);
       const pulse = 0.5 + Math.sin((state.frame - hazard.startFrame) * 0.21) * 0.5;
       ctx.save();
@@ -887,17 +903,17 @@ export class Renderer {
       ctx.globalAlpha = active ? 0.88 : 0.28;
       ctx.fillStyle = active ? "rgba(255, 195, 83, 0.18)" : "rgba(255, 232, 150, 0.1)";
       ctx.strokeStyle = active ? "#e59b43" : "rgba(255, 235, 176, 0.32)";
-      ctx.lineWidth = 2.5 * camera.scale;
+      ctx.lineWidth = 2.5 * scale;
       ctx.beginPath();
-      ctx.arc(0, 0, (34 + pulse * 4) * camera.scale, 0, Math.PI * 2);
+      ctx.arc(0, 0, (34 + pulse * 4) * scale, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
       ctx.fillStyle = "#6f3f25";
       ctx.strokeStyle = "#ffe6a1";
-      ctx.lineWidth = 3 * camera.scale;
+      ctx.lineWidth = 3 * scale;
       ctx.beginPath();
-      ctx.arc(0, 0, 12 * camera.scale, 0, Math.PI * 2);
+      ctx.arc(0, 0, 12 * scale, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
@@ -905,25 +921,25 @@ export class Renderer {
       ctx.rotate(Math.sin(state.frame * 0.14 + hazard.id) * 0.45);
       ctx.lineCap = "round";
       ctx.strokeStyle = active ? "#f6d67b" : "rgba(255, 230, 161, 0.5)";
-      ctx.lineWidth = 11 * camera.scale;
+      ctx.lineWidth = 11 * scale;
       ctx.beginPath();
-      ctx.moveTo(-35 * camera.scale, 0);
-      ctx.lineTo(35 * camera.scale, 0);
+      ctx.moveTo(-35 * scale, 0);
+      ctx.lineTo(35 * scale, 0);
       ctx.stroke();
       ctx.strokeStyle = active ? "#d86f46" : "rgba(216, 111, 70, 0.5)";
-      ctx.lineWidth = 4 * camera.scale;
-      ctx.setLineDash([8 * camera.scale, 8 * camera.scale]);
+      ctx.lineWidth = 4 * scale;
+      ctx.setLineDash([8 * scale, 8 * scale]);
       ctx.beginPath();
-      ctx.moveTo(-32 * camera.scale, 0);
-      ctx.lineTo(32 * camera.scale, 0);
+      ctx.moveTo(-32 * scale, 0);
+      ctx.lineTo(32 * scale, 0);
       ctx.stroke();
       ctx.restore();
 
       if (active) {
         ctx.strokeStyle = `rgba(255, 230, 161, ${0.32 + pulse * 0.22})`;
-        ctx.lineWidth = 2 * camera.scale;
+        ctx.lineWidth = 2 * scale;
         ctx.beginPath();
-        ctx.arc(0, 0, (43 + pulse * 8) * camera.scale, 0, Math.PI * 2);
+        ctx.arc(0, 0, (43 + pulse * 8) * scale, 0, Math.PI * 2);
         ctx.stroke();
       }
       ctx.restore();
@@ -941,7 +957,8 @@ export class Renderer {
         continue;
       }
 
-      const bob = Math.sin(state.frame * 0.12 + pickup.id) * 4 * camera.scale;
+      const scale = this.getObjectScale(state, camera, pickup.progress);
+      const bob = Math.sin(state.frame * 0.12 + pickup.id) * 4 * scale;
       const glowColor = pickup.kind === "boost" ? "rgba(80, 200, 235, 0.24)" : "rgba(255, 212, 106, 0.24)";
       const color = pickup.kind === "boost" ? "#41c7e8" : "#ffd56a";
 
@@ -950,31 +967,31 @@ export class Renderer {
       ctx.rotate(Math.sin(state.frame * 0.025 + pickup.id) * 0.08);
       ctx.fillStyle = glowColor;
       ctx.beginPath();
-      ctx.arc(0, 0, 30 * camera.scale, 0, Math.PI * 2);
+      ctx.arc(0, 0, 30 * scale, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 2.2 * camera.scale;
-      ctx.setLineDash([7 * camera.scale, 9 * camera.scale]);
+      ctx.lineWidth = 2.2 * scale;
+      ctx.setLineDash([7 * scale, 9 * scale]);
       ctx.lineDashOffset = -state.frame * 0.45;
       ctx.beginPath();
-      ctx.arc(0, 0, 24 * camera.scale, 0, Math.PI * 2);
+      ctx.arc(0, 0, 24 * scale, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
-      const gem = ctx.createRadialGradient(-7 * camera.scale, -8 * camera.scale, 2, 0, 0, 22 * camera.scale);
+      const gem = ctx.createRadialGradient(-7 * scale, -8 * scale, 2, 0, 0, 22 * scale);
       gem.addColorStop(0, "#ffffff");
       gem.addColorStop(0.25, color);
       gem.addColorStop(1, pickup.kind === "boost" ? "#217eaf" : "#9a7029");
       ctx.fillStyle = gem;
       ctx.strokeStyle = "#fff4cb";
-      ctx.lineWidth = 3 * camera.scale;
-      this.drawHex(ctx, 0, 0, 21 * camera.scale);
+      ctx.lineWidth = 3 * scale;
+      this.drawHex(ctx, 0, 0, 21 * scale);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = "#10253d";
       if (pickup.kind === "boost") {
-        this.drawBolt(ctx, 0, 0, 0.78 * camera.scale);
+        this.drawBolt(ctx, 0, 0, 0.78 * scale);
       } else {
-        this.drawShieldIcon(ctx, 0, 0, 0.78 * camera.scale);
+        this.drawShieldIcon(ctx, 0, 0, 0.78 * scale);
       }
       ctx.restore();
     }
@@ -991,22 +1008,23 @@ export class Renderer {
         continue;
       }
 
+      const scale = this.getObjectScale(state, camera, obstacle.progress);
       const wobble = Math.sin(state.frame * 0.16 + obstacle.id * 1.7);
       const juicedPoint = {
-        x: point.x + wobble * (obstacle.kind === "cone" ? 2.4 : 0.8) * camera.scale,
-        y: point.y + Math.abs(wobble) * (obstacle.kind === "cooler" ? 2.8 : 1.2) * camera.scale
+        x: point.x + wobble * (obstacle.kind === "cone" ? 2.4 : 0.8) * scale,
+        y: point.y + Math.abs(wobble) * (obstacle.kind === "cooler" ? 2.8 : 1.2) * scale
       };
 
       if (obstacle.kind === "cone") {
-        this.drawCone(ctx, juicedPoint, camera.scale, obstacle.collided, wobble * 0.08);
+        this.drawCone(ctx, juicedPoint, scale, obstacle.collided, wobble * 0.08);
       } else if (obstacle.kind === "cooler") {
-        this.drawCooler(ctx, juicedPoint, camera.scale, obstacle.collided, obstacle.clearable);
+        this.drawCooler(ctx, juicedPoint, scale, obstacle.collided, obstacle.clearable);
       } else if (obstacle.kind === "mud") {
-        this.drawMud(ctx, juicedPoint, camera.scale, state.frame, obstacle.id);
+        this.drawMud(ctx, juicedPoint, scale, state.frame, obstacle.id);
       } else if (obstacle.kind === "log") {
-        this.drawLog(ctx, juicedPoint, camera.scale, obstacle.collided);
+        this.drawLog(ctx, juicedPoint, scale, obstacle.collided);
       } else {
-        this.drawBarricade(ctx, juicedPoint, camera.scale, obstacle.collided, obstacle.clearable);
+        this.drawBarricade(ctx, juicedPoint, scale, obstacle.collided, obstacle.clearable);
       }
     }
   }
@@ -1014,6 +1032,7 @@ export class Renderer {
   private drawFinishGate(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
     const left = this.project(state, camera, state.match.finishProgress, -TRACK_WIDTH / 2 - 22);
     const right = this.project(state, camera, state.match.finishProgress, TRACK_WIDTH / 2 + 22);
+    const scale = this.getObjectScale(state, camera, state.match.finishProgress);
 
     if (!this.isVisible(left, 170) && !this.isVisible(right, 170)) {
       return;
@@ -1022,7 +1041,7 @@ export class Renderer {
     ctx.save();
     ctx.lineCap = "round";
     ctx.strokeStyle = "#13243d";
-    ctx.lineWidth = 14 * camera.scale;
+    ctx.lineWidth = 14 * scale;
     ctx.beginPath();
     ctx.moveTo(left.x, left.y);
     ctx.lineTo(right.x, right.y);
@@ -1033,7 +1052,7 @@ export class Renderer {
       const t0 = index / stripeCount;
       const t1 = (index + 0.58) / stripeCount;
       ctx.strokeStyle = index % 2 === 0 ? "#ffffff" : "#151f35";
-      ctx.lineWidth = 9 * camera.scale;
+      ctx.lineWidth = 9 * scale;
       ctx.beginPath();
       ctx.moveTo(lerp(left.x, right.x, t0), lerp(left.y, right.y, t0));
       ctx.lineTo(lerp(left.x, right.x, t1), lerp(left.y, right.y, t1));
@@ -1042,12 +1061,12 @@ export class Renderer {
 
     ctx.fillStyle = "#fff176";
     ctx.strokeStyle = "#13243d";
-    ctx.lineWidth = 4 * camera.scale;
-    ctx.font = `900 ${Math.max(13, 18 * camera.scale)}px ${HUD_FONT}`;
+    ctx.lineWidth = 4 * scale;
+    ctx.font = `900 ${Math.max(13, 18 * scale)}px ${HUD_FONT}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.strokeText("FINISH", (left.x + right.x) / 2, left.y - 28 * camera.scale);
-    ctx.fillText("FINISH", (left.x + right.x) / 2, left.y - 28 * camera.scale);
+    ctx.strokeText("FINISH", (left.x + right.x) / 2, left.y - 28 * scale);
+    ctx.fillText("FINISH", (left.x + right.x) / 2, left.y - 28 * scale);
     ctx.restore();
   }
 
@@ -1058,7 +1077,14 @@ export class Renderer {
     }
 
     const angle = Math.atan2(getTrackTangentX(state.match, state.rival.progress), 1);
-    this.drawRivalCar(ctx, point, angle, RIVAL_RADIUS * camera.scale, state.rival.taggedFrames > 0, state.frame);
+    this.drawRivalCar(
+      ctx,
+      point,
+      angle,
+      RIVAL_RADIUS * this.getObjectScale(state, camera, state.rival.progress) * 1.12,
+      state.rival.taggedFrames > 0,
+      state.frame
+    );
   }
 
   private drawShots(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
@@ -1069,9 +1095,10 @@ export class Renderer {
         continue;
       }
 
+      const scale = this.getObjectScale(state, camera, shot.progress);
       ctx.save();
       ctx.strokeStyle = "rgba(255, 241, 118, 0.34)";
-      ctx.lineWidth = 15 * camera.scale;
+      ctx.lineWidth = 15 * scale;
       ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(tail.x, tail.y);
@@ -1079,7 +1106,7 @@ export class Renderer {
       ctx.stroke();
 
       ctx.strokeStyle = "rgba(255, 122, 72, 0.86)";
-      ctx.lineWidth = 6 * camera.scale;
+      ctx.lineWidth = 6 * scale;
       ctx.beginPath();
       ctx.moveTo(tail.x, tail.y);
       ctx.lineTo(point.x, point.y);
@@ -1087,16 +1114,16 @@ export class Renderer {
 
       ctx.fillStyle = "rgba(255, 241, 118, 0.42)";
       ctx.beginPath();
-      ctx.arc(point.x, point.y, SHOT_RADIUS * 1.9 * camera.scale, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, SHOT_RADIUS * 1.9 * scale, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 2.5 * camera.scale;
+      ctx.lineWidth = 2.5 * scale;
       ctx.beginPath();
-      ctx.arc(point.x, point.y, SHOT_RADIUS * camera.scale, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, SHOT_RADIUS * scale, 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillStyle = "#fff176";
       ctx.beginPath();
-      ctx.arc(point.x, point.y, SHOT_RADIUS * 0.82 * camera.scale, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, SHOT_RADIUS * 0.82 * scale, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -1114,32 +1141,33 @@ export class Renderer {
 
     const point = this.project(state, camera, lockTarget.progress, lockTarget.lateral);
     const pulse = 0.5 + Math.sin(state.frame * 0.28) * 0.5;
+    const scale = this.getObjectScale(state, camera, lockTarget.progress);
 
     ctx.save();
     ctx.strokeStyle = "rgba(16, 37, 61, 0.8)";
-    ctx.lineWidth = 8 * camera.scale;
+    ctx.lineWidth = 8 * scale;
     ctx.beginPath();
-    ctx.arc(point.x, point.y, (lockTarget.radius + 17 + pulse * 5) * camera.scale, 0, Math.PI * 2);
+    ctx.arc(point.x, point.y, (lockTarget.radius + 17 + pulse * 5) * scale, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.strokeStyle = lockTarget.kind === "rival" ? "#bf8cff" : "#fff176";
-    ctx.lineWidth = 4.5 * camera.scale;
-    ctx.setLineDash([9 * camera.scale, 7 * camera.scale]);
+    ctx.lineWidth = 4.5 * scale;
+    ctx.setLineDash([9 * scale, 7 * scale]);
     ctx.lineDashOffset = -state.frame * 0.85;
     ctx.beginPath();
-    ctx.arc(point.x, point.y, (lockTarget.radius + 13 + pulse * 5) * camera.scale, 0, Math.PI * 2);
+    ctx.arc(point.x, point.y, (lockTarget.radius + 13 + pulse * 5) * scale, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.lineWidth = 3 * camera.scale;
+    ctx.lineWidth = 3 * scale;
     ctx.beginPath();
-    ctx.moveTo(point.x - (lockTarget.radius + 25) * camera.scale, point.y);
-    ctx.lineTo(point.x - (lockTarget.radius + 11) * camera.scale, point.y);
-    ctx.moveTo(point.x + (lockTarget.radius + 25) * camera.scale, point.y);
-    ctx.lineTo(point.x + (lockTarget.radius + 11) * camera.scale, point.y);
-    ctx.moveTo(point.x, point.y - (lockTarget.radius + 25) * camera.scale);
-    ctx.lineTo(point.x, point.y - (lockTarget.radius + 11) * camera.scale);
-    ctx.moveTo(point.x, point.y + (lockTarget.radius + 25) * camera.scale);
-    ctx.lineTo(point.x, point.y + (lockTarget.radius + 11) * camera.scale);
+    ctx.moveTo(point.x - (lockTarget.radius + 25) * scale, point.y);
+    ctx.lineTo(point.x - (lockTarget.radius + 11) * scale, point.y);
+    ctx.moveTo(point.x + (lockTarget.radius + 25) * scale, point.y);
+    ctx.lineTo(point.x + (lockTarget.radius + 11) * scale, point.y);
+    ctx.moveTo(point.x, point.y - (lockTarget.radius + 25) * scale);
+    ctx.lineTo(point.x, point.y - (lockTarget.radius + 11) * scale);
+    ctx.moveTo(point.x, point.y + (lockTarget.radius + 25) * scale);
+    ctx.lineTo(point.x, point.y + (lockTarget.radius + 11) * scale);
     ctx.stroke();
     ctx.restore();
   }
@@ -1147,26 +1175,28 @@ export class Renderer {
   private drawPlayer(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera, inputVisual: InputVisualState): void {
     const point = this.project(state, camera, state.player.progress, state.player.lateral);
     const trackAngle = Math.atan2(getTrackTangentX(state.match, state.player.progress), 1);
-    const lean = (inputVisual.dragAmount || inputVisual.steer * 0.7) * 0.17;
-    const bump = state.player.bumpFrames > 0 ? Math.sin(state.frame * 0.9) * 2.2 * camera.scale : 0;
+    const visualScale = this.getObjectScale(state, camera, state.player.progress, 1.12);
+    const hardSteer = Math.abs(inputVisual.steer) > 0.72 && isBoosting(state.player);
+    const lean = inputVisual.steer * (hardSteer ? 0.24 : 0.18);
+    const bump = state.player.bumpFrames > 0 ? Math.sin(state.frame * 0.9) * 2.2 * visualScale : 0;
     const recoil = state.cannonCooldown > CANNON_COOLDOWN_FRAMES - 8 ? 1 - (CANNON_COOLDOWN_FRAMES - state.cannonCooldown) / 8 : 0;
 
     ctx.save();
     ctx.translate(point.x, point.y + bump);
     ctx.rotate(trackAngle + lean);
-    this.drawCartShadow(ctx, camera.scale);
-    this.drawBoostFlame(ctx, state, camera.scale);
-    this.drawCartBody(ctx, state, camera.scale, recoil);
+    this.drawCartShadow(ctx, visualScale);
+    this.drawBoostFlame(ctx, state, visualScale, inputVisual.steer);
+    this.drawCartBody(ctx, state, visualScale, recoil);
     ctx.restore();
 
     if (hasShield(state.player)) {
       ctx.save();
       ctx.strokeStyle = "rgba(154, 255, 129, 0.9)";
-      ctx.lineWidth = 4 * camera.scale;
-      ctx.setLineDash([8 * camera.scale, 7 * camera.scale]);
+      ctx.lineWidth = 4 * visualScale;
+      ctx.setLineDash([8 * visualScale, 7 * visualScale]);
       ctx.lineDashOffset = -state.frame;
       ctx.beginPath();
-      ctx.arc(point.x, point.y, 35 * camera.scale, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, 35 * visualScale, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -1182,12 +1212,13 @@ export class Renderer {
         puff.progress + puff.driftProgress * age,
         puff.lateral + puff.driftLateral * age
       );
+      const scale = this.getObjectScale(state, camera, puff.progress + puff.driftProgress * age);
 
       ctx.save();
       ctx.globalAlpha = alpha * 0.62;
       ctx.fillStyle = "#e9f7ff";
       ctx.beginPath();
-      ctx.arc(point.x, point.y, puff.radius * camera.scale * (1 + age / 44), 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, puff.radius * scale * (1 + age / 44), 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -1196,16 +1227,17 @@ export class Renderer {
       const age = state.frame - burst.startFrame;
       const alpha = clamp(1 - age / 34, 0, 1);
       const point = this.project(state, camera, burst.progress, burst.lateral);
+      const scale = this.getObjectScale(state, camera, burst.progress);
 
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = burst.color;
-      ctx.lineWidth = 5 * camera.scale;
+      ctx.lineWidth = 5 * scale;
       ctx.lineCap = "round";
       for (let ray = 0; ray < 10; ray += 1) {
         const angle = (Math.PI * 2 * ray) / 10 + age * 0.04;
-        const inner = (10 + age * 0.7) * camera.scale;
-        const outer = (24 + age * 1.8) * camera.scale;
+        const inner = (10 + age * 0.7) * scale;
+        const outer = (24 + age * 1.8) * scale;
         ctx.beginPath();
         ctx.moveTo(point.x + Math.cos(angle) * inner, point.y + Math.sin(angle) * inner);
         ctx.lineTo(point.x + Math.cos(angle) * outer, point.y + Math.sin(angle) * outer);
@@ -1218,17 +1250,18 @@ export class Renderer {
       const age = state.frame - floatingText.startFrame;
       const alpha = clamp(1 - age / 52, 0, 1);
       const point = this.project(state, camera, floatingText.progress, floatingText.lateral);
+      const scale = this.getObjectScale(state, camera, floatingText.progress);
 
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.font = `900 ${Math.max(14, 22 * camera.scale)}px ${HUD_FONT}`;
+      ctx.font = `900 ${Math.max(14, 22 * scale)}px ${HUD_FONT}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.strokeStyle = "#10253d";
-      ctx.lineWidth = 5 * camera.scale;
+      ctx.lineWidth = 5 * scale;
       ctx.fillStyle = floatingText.color;
-      ctx.strokeText(floatingText.text, point.x, point.y - (26 + age * 0.9) * camera.scale);
-      ctx.fillText(floatingText.text, point.x, point.y - (26 + age * 0.9) * camera.scale);
+      ctx.strokeText(floatingText.text, point.x, point.y - (26 + age * 0.9) * scale);
+      ctx.fillText(floatingText.text, point.x, point.y - (26 + age * 0.9) * scale);
       ctx.restore();
     }
   }
@@ -1418,43 +1451,57 @@ export class Renderer {
       return;
     }
 
-    const zoneX = 18;
-    const zoneY = this.viewport.height - 184;
-    const zoneWidth = Math.min(184, this.viewport.width * 0.52);
-    const zoneHeight = 122;
-    const knobX = zoneX + zoneWidth / 2 + inputVisual.dragAmount * 52;
+    const buttonSize = clamp(this.viewport.width * 0.235, 78, TOUCH_BUTTON_SIZE);
+    const sidePad = TOUCH_BOTTOM_MARGIN + buttonSize + 10;
+    const zoneX = sidePad;
+    const zoneWidth = Math.max(132, this.viewport.width - sidePad * 2);
+    const zoneY = Math.max(this.viewport.height * STEER_ZONE_TOP_RATIO, this.viewport.height - TOUCH_BOTTOM_MARGIN - buttonSize - 116);
+    const zoneHeight = Math.min(132, this.viewport.height - zoneY - 22);
+    const centerX = zoneX + zoneWidth / 2;
+    const centerY = zoneY + zoneHeight / 2;
+    const knobX = centerX + inputVisual.dragAmount * Math.max(34, zoneWidth * STEER_ZONE_FULL_POWER_RATIO);
 
     ctx.save();
     ctx.globalAlpha = inputVisual.touchingSteer ? 0.82 : state.frame < 120 ? 0.78 : 0.34;
     const pad = ctx.createLinearGradient(zoneX, zoneY, zoneX + zoneWidth, zoneY + zoneHeight);
-    pad.addColorStop(0, "rgba(57, 224, 255, 0.22)");
-    pad.addColorStop(1, "rgba(8, 17, 38, 0.42)");
+    pad.addColorStop(0, "rgba(246, 214, 123, 0.18)");
+    pad.addColorStop(0.5, "rgba(57, 224, 255, 0.2)");
+    pad.addColorStop(1, "rgba(246, 214, 123, 0.18)");
     ctx.fillStyle = pad;
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.28)";
+    ctx.strokeStyle = "rgba(255, 244, 203, 0.34)";
     ctx.lineWidth = 2;
     this.roundRect(ctx, zoneX, zoneY, zoneWidth, zoneHeight, 24);
     ctx.fill();
     ctx.stroke();
 
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.36)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
     ctx.lineWidth = 4;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(zoneX + 34, zoneY + zoneHeight / 2);
-    ctx.lineTo(zoneX + 62, zoneY + zoneHeight / 2);
-    ctx.moveTo(zoneX + 34, zoneY + zoneHeight / 2);
-    ctx.lineTo(zoneX + 48, zoneY + zoneHeight / 2 - 13);
-    ctx.moveTo(zoneX + 34, zoneY + zoneHeight / 2);
-    ctx.lineTo(zoneX + 48, zoneY + zoneHeight / 2 + 13);
-    ctx.moveTo(zoneX + zoneWidth - 34, zoneY + zoneHeight / 2);
-    ctx.lineTo(zoneX + zoneWidth - 62, zoneY + zoneHeight / 2);
-    ctx.moveTo(zoneX + zoneWidth - 34, zoneY + zoneHeight / 2);
-    ctx.lineTo(zoneX + zoneWidth - 48, zoneY + zoneHeight / 2 - 13);
-    ctx.moveTo(zoneX + zoneWidth - 34, zoneY + zoneHeight / 2);
-    ctx.lineTo(zoneX + zoneWidth - 48, zoneY + zoneHeight / 2 + 13);
+    ctx.moveTo(zoneX + 22, centerY);
+    ctx.lineTo(zoneX + 52, centerY);
+    ctx.moveTo(zoneX + 22, centerY);
+    ctx.lineTo(zoneX + 37, centerY - 13);
+    ctx.moveTo(zoneX + 22, centerY);
+    ctx.lineTo(zoneX + 37, centerY + 13);
+    ctx.moveTo(zoneX + zoneWidth - 22, centerY);
+    ctx.lineTo(zoneX + zoneWidth - 52, centerY);
+    ctx.moveTo(zoneX + zoneWidth - 22, centerY);
+    ctx.lineTo(zoneX + zoneWidth - 37, centerY - 13);
+    ctx.moveTo(zoneX + zoneWidth - 22, centerY);
+    ctx.lineTo(zoneX + zoneWidth - 37, centerY + 13);
     ctx.stroke();
 
-    const knob = ctx.createRadialGradient(knobX - 7, zoneY + zoneHeight / 2 - 8, 2, knobX, zoneY + zoneHeight / 2, 26);
+    ctx.strokeStyle = "rgba(255, 244, 203, 0.28)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 7]);
+    ctx.beginPath();
+    ctx.moveTo(centerX, zoneY + 18);
+    ctx.lineTo(centerX, zoneY + zoneHeight - 18);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const knob = ctx.createRadialGradient(knobX - 7, centerY - 8, 2, knobX, centerY, 27);
     knob.addColorStop(0, "#ffffff");
     knob.addColorStop(0.32, "#39e0ff");
     knob.addColorStop(1, "#166ad6");
@@ -1462,7 +1509,7 @@ export class Renderer {
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(knobX, zoneY + zoneHeight / 2, 23, 0, Math.PI * 2);
+    ctx.arc(knobX, centerY, 23, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
@@ -1470,7 +1517,7 @@ export class Renderer {
     ctx.font = `900 12px ${HUD_FONT}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("STEER", zoneX + zoneWidth / 2, zoneY + 26);
+    ctx.fillText("STEER", centerX, zoneY + 25);
     ctx.restore();
   }
 
@@ -1479,12 +1526,12 @@ export class Renderer {
       return;
     }
 
-    const size = clamp(this.viewport.width * 0.22, 68, TOUCH_BUTTON_SIZE);
+    const size = clamp(this.viewport.width * 0.235, 78, TOUCH_BUTTON_SIZE);
+    const boostX = TOUCH_BOTTOM_MARGIN;
     const fireX = this.viewport.width - TOUCH_BOTTOM_MARGIN - size;
     const y = this.viewport.height - TOUCH_BOTTOM_MARGIN - size;
-    const boostX = fireX - TOUCH_BUTTON_GAP - size;
 
-    this.drawBoostButton(ctx, boostX, y + 10, size * 0.9, state.player.boostCharges > 0, inputVisual.boostPressed);
+    this.drawBoostButton(ctx, boostX, y, size, state.player.boostCharges > 0, inputVisual.boostPressed);
     this.drawFireButton(ctx, fireX, y, size, state.cannonCooldown <= 0, state.cannonCooldown, inputVisual.firePressed);
   }
 
@@ -2090,34 +2137,44 @@ export class Renderer {
     ctx.globalAlpha = tagged ? 0.65 + Math.sin(frame * 0.5) * 0.16 : 1;
     this.drawCartShadow(ctx, size / PLAYER_RADIUS);
     const rivalBody = ctx.createLinearGradient(-size, -size * 1.2, size, size * 1.2);
-    rivalBody.addColorStop(0, "#ffe08b");
-    rivalBody.addColorStop(0.38, "#e58a3d");
-    rivalBody.addColorStop(1, "#8d4a28");
+    rivalBody.addColorStop(0, "#fff0a8");
+    rivalBody.addColorStop(0.36, "#e58a3d");
+    rivalBody.addColorStop(0.72, "#b95a38");
+    rivalBody.addColorStop(1, "#6b3928");
     ctx.fillStyle = rivalBody;
     ctx.strokeStyle = "#13243d";
     ctx.lineWidth = 3;
-    this.roundRect(ctx, -size * 0.78, -size * 1.18, size * 1.56, size * 2.2, 9);
+    this.roundRect(ctx, -size * 0.9, -size * 1.18, size * 1.8, size * 2.24, 10);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = "#13243d";
-    this.roundRect(ctx, -size * 0.98, -size * 0.72, size * 0.32, size * 0.52, 4);
+    this.roundRect(ctx, -size * 1.12, -size * 0.72, size * 0.36, size * 0.56, 4);
     ctx.fill();
-    this.roundRect(ctx, size * 0.66, -size * 0.72, size * 0.32, size * 0.52, 4);
+    this.roundRect(ctx, size * 0.76, -size * 0.72, size * 0.36, size * 0.56, 4);
     ctx.fill();
-    this.roundRect(ctx, -size * 0.98, size * 0.38, size * 0.32, size * 0.52, 4);
+    this.roundRect(ctx, -size * 1.12, size * 0.38, size * 0.36, size * 0.56, 4);
     ctx.fill();
-    this.roundRect(ctx, size * 0.66, size * 0.38, size * 0.32, size * 0.52, 4);
+    this.roundRect(ctx, size * 0.76, size * 0.38, size * 0.36, size * 0.56, 4);
     ctx.fill();
-    ctx.fillStyle = "#245f49";
+    ctx.fillStyle = "#285d4e";
     ctx.beginPath();
-    ctx.moveTo(0, -size * 1.24);
-    ctx.lineTo(size * 0.5, -size * 0.28);
-    ctx.lineTo(-size * 0.5, -size * 0.28);
+    ctx.moveTo(0, -size * 1.33);
+    ctx.lineTo(size * 0.56, -size * 0.28);
+    ctx.lineTo(-size * 0.56, -size * 0.28);
     ctx.closePath();
     ctx.fill();
+    ctx.strokeStyle = "#13243d";
+    ctx.lineWidth = 2.4;
+    ctx.stroke();
     ctx.fillStyle = "#ffe08b";
     ctx.beginPath();
     ctx.arc(0, -size * 0.64, size * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#41c7e8";
+    this.roundRect(ctx, -size * 0.45, -size * 0.12, size * 0.9, size * 0.22, size * 0.1);
+    ctx.fill();
+    ctx.fillStyle = "#fff1b1";
+    this.roundRect(ctx, -size * 0.32, size * 0.16, size * 0.64, size * 0.18, size * 0.09);
     ctx.fill();
     ctx.strokeStyle = "#13243d";
     ctx.lineWidth = 3;
@@ -2125,6 +2182,19 @@ export class Renderer {
     ctx.moveTo(-size * 0.42, size * 0.62);
     ctx.lineTo(size * 0.42, size * 0.62);
     ctx.stroke();
+    ctx.strokeStyle = "#fff1b1";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(size * 0.52, -size * 1.05);
+    ctx.lineTo(size * 0.52, -size * 1.62);
+    ctx.stroke();
+    ctx.fillStyle = "#bf8cff";
+    ctx.beginPath();
+    ctx.moveTo(size * 0.52, -size * 1.6);
+    ctx.lineTo(size * 1.02, -size * 1.44);
+    ctx.lineTo(size * 0.52, -size * 1.27);
+    ctx.closePath();
+    ctx.fill();
     if (tagged) {
       ctx.strokeStyle = "#ffd568";
       ctx.lineWidth = 2.5;
@@ -2137,128 +2207,144 @@ export class Renderer {
   }
 
   private drawCartBody(ctx: CanvasRenderingContext2D, state: GameState, scale: number, recoil: number): void {
-    const wheelSpin = state.player.progress * 0.065;
+    const wheelSpin = state.player.progress * 0.075;
     const bodyLift = isBoosting(state.player) ? -3 * scale : 0;
 
     ctx.save();
     ctx.translate(0, bodyLift);
-    this.drawWheel(ctx, -20 * scale, -19 * scale, 10 * scale, wheelSpin);
-    this.drawWheel(ctx, 20 * scale, -19 * scale, 10 * scale, wheelSpin);
-    this.drawWheel(ctx, -21 * scale, 20 * scale, 11 * scale, wheelSpin);
-    this.drawWheel(ctx, 21 * scale, 20 * scale, 11 * scale, wheelSpin);
+    this.drawWheel(ctx, -25 * scale, -21 * scale, 12 * scale, wheelSpin);
+    this.drawWheel(ctx, 25 * scale, -21 * scale, 12 * scale, wheelSpin);
+    this.drawWheel(ctx, -26 * scale, 23 * scale, 13 * scale, wheelSpin);
+    this.drawWheel(ctx, 26 * scale, 23 * scale, 13 * scale, wheelSpin);
 
     ctx.strokeStyle = "#13243d";
-    ctx.lineWidth = 5 * scale;
+    ctx.lineWidth = 6 * scale;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(-21 * scale, 17 * scale);
-    ctx.lineTo(21 * scale, 17 * scale);
-    ctx.moveTo(-19 * scale, -17 * scale);
-    ctx.lineTo(19 * scale, -17 * scale);
+    ctx.moveTo(-27 * scale, 20 * scale);
+    ctx.lineTo(27 * scale, 20 * scale);
+    ctx.moveTo(-24 * scale, -19 * scale);
+    ctx.lineTo(24 * scale, -19 * scale);
     ctx.stroke();
 
-    const body = ctx.createLinearGradient(-25 * scale, -34 * scale, 25 * scale, 34 * scale);
+    const body = ctx.createLinearGradient(-29 * scale, -38 * scale, 29 * scale, 38 * scale);
     body.addColorStop(0, "#ffe08b");
     body.addColorStop(0.3, "#ef6e57");
     body.addColorStop(0.72, "#c8463d");
     body.addColorStop(1, "#78342d");
     ctx.fillStyle = body;
     ctx.strokeStyle = "#13243d";
-    ctx.lineWidth = 3.5 * scale;
-    this.roundRect(ctx, -25 * scale, -34 * scale, 50 * scale, 68 * scale, 15 * scale);
+    ctx.lineWidth = 3.8 * scale;
+    this.roundRect(ctx, -29 * scale, -38 * scale, 58 * scale, 76 * scale, 17 * scale);
     ctx.fill();
     ctx.stroke();
 
+    ctx.fillStyle = "rgba(255, 241, 177, 0.22)";
+    this.roundRect(ctx, -22 * scale, -31 * scale, 11 * scale, 58 * scale, 6 * scale);
+    ctx.fill();
+    ctx.fillStyle = "rgba(16, 37, 61, 0.22)";
+    this.roundRect(ctx, 13 * scale, -29 * scale, 9 * scale, 55 * scale, 5 * scale);
+    ctx.fill();
     ctx.fillStyle = "#10253d";
-    this.roundRect(ctx, -17 * scale, 13 * scale, 34 * scale, 10 * scale, 5 * scale);
+    this.roundRect(ctx, -18 * scale, 15 * scale, 36 * scale, 11 * scale, 6 * scale);
     ctx.fill();
     ctx.fillStyle = "#f6d67b";
-    this.roundRect(ctx, -10 * scale, 16 * scale, 20 * scale, 4 * scale, 2 * scale);
+    this.roundRect(ctx, -10 * scale, 18.5 * scale, 20 * scale, 4 * scale, 2 * scale);
     ctx.fill();
     ctx.fillStyle = "#2f7e5b";
     ctx.beginPath();
-    ctx.moveTo(9 * scale, -18 * scale);
-    ctx.lineTo(23 * scale, -13 * scale);
-    ctx.lineTo(9 * scale, -8 * scale);
+    ctx.moveTo(11 * scale, -23 * scale);
+    ctx.lineTo(27 * scale, -17 * scale);
+    ctx.lineTo(11 * scale, -11 * scale);
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = "#fff1b1";
     ctx.lineWidth = 1.8 * scale;
     ctx.stroke();
     ctx.fillStyle = "rgba(255, 255, 255, 0.38)";
-    this.roundRect(ctx, -14 * scale, -27 * scale, 28 * scale, 13 * scale, 7 * scale);
+    this.roundRect(ctx, -16 * scale, -31 * scale, 32 * scale, 14 * scale, 8 * scale);
     ctx.fill();
+    ctx.fillStyle = "#ffd56a";
+    ctx.beginPath();
+    ctx.arc(-1 * scale, -5 * scale, 8 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#10253d";
+    ctx.font = `900 ${8 * scale}px ${HUD_FONT}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("C", -1 * scale, -4.5 * scale);
     ctx.fillStyle = "rgba(255, 255, 255, 0.18)";
-    this.roundRect(ctx, 8 * scale, -5 * scale, 8 * scale, 25 * scale, 4 * scale);
+    this.roundRect(ctx, 10 * scale, -5 * scale, 8 * scale, 26 * scale, 4 * scale);
     ctx.fill();
 
     ctx.save();
-    ctx.translate(0, (-20 - recoil * 8) * scale);
+    ctx.translate(0, (-23 - recoil * 9) * scale);
     ctx.fillStyle = "#10253d";
     ctx.beginPath();
-    ctx.arc(0, 8 * scale, 14 * scale, 0, Math.PI * 2);
+    ctx.arc(0, 9 * scale, 15.5 * scale, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = "#f6d67b";
-    ctx.lineWidth = 2 * scale;
+    ctx.lineWidth = 2.4 * scale;
     ctx.stroke();
     ctx.strokeStyle = "#13243d";
-    ctx.lineWidth = 10 * scale;
+    ctx.lineWidth = 11 * scale;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(0, 7 * scale);
-    ctx.lineTo(0, -37 * scale);
+    ctx.moveTo(0, 8 * scale);
+    ctx.lineTo(0, -42 * scale);
     ctx.stroke();
     ctx.strokeStyle = "#fff1b1";
-    ctx.lineWidth = 5 * scale;
+    ctx.lineWidth = 5.5 * scale;
     ctx.beginPath();
-    ctx.moveTo(0, 5 * scale);
-    ctx.lineTo(0, -34 * scale);
+    ctx.moveTo(0, 6 * scale);
+    ctx.lineTo(0, -39 * scale);
     ctx.stroke();
     ctx.fillStyle = "#41c7e8";
     ctx.beginPath();
-    ctx.arc(0, 8 * scale, 6.5 * scale, 0, Math.PI * 2);
+    ctx.arc(0, 9 * scale, 7 * scale, 0, Math.PI * 2);
     ctx.fill();
 
     if (recoil > 0) {
       ctx.fillStyle = `rgba(255, 213, 104, ${recoil})`;
       ctx.beginPath();
-      ctx.moveTo(0, -48 * scale);
-      ctx.lineTo(-11 * scale * recoil, -28 * scale);
-      ctx.lineTo(11 * scale * recoil, -28 * scale);
+      ctx.moveTo(0, -54 * scale);
+      ctx.lineTo(-13 * scale * recoil, -31 * scale);
+      ctx.lineTo(13 * scale * recoil, -31 * scale);
       ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = `rgba(255, 255, 255, ${recoil})`;
       ctx.lineWidth = 2 * scale;
       ctx.beginPath();
-      ctx.moveTo(0, -52 * scale);
-      ctx.lineTo(0, -64 * scale);
-      ctx.moveTo(-12 * scale, -45 * scale);
-      ctx.lineTo(-22 * scale, -53 * scale);
-      ctx.moveTo(12 * scale, -45 * scale);
-      ctx.lineTo(22 * scale, -53 * scale);
+      ctx.moveTo(0, -58 * scale);
+      ctx.lineTo(0, -70 * scale);
+      ctx.moveTo(-13 * scale, -50 * scale);
+      ctx.lineTo(-24 * scale, -58 * scale);
+      ctx.moveTo(13 * scale, -50 * scale);
+      ctx.lineTo(24 * scale, -58 * scale);
       ctx.stroke();
     }
     ctx.restore();
     ctx.restore();
   }
 
-  private drawBoostFlame(ctx: CanvasRenderingContext2D, state: GameState, scale: number): void {
+  private drawBoostFlame(ctx: CanvasRenderingContext2D, state: GameState, scale: number, steer: number): void {
     if (!isBoosting(state.player)) {
       return;
     }
 
     const pulse = 0.65 + Math.sin(state.frame * 0.52) * 0.22;
+    const drift = clamp(steer, -1, 1) * 8 * scale;
     ctx.save();
     ctx.fillStyle = `rgba(57, 224, 255, ${0.68 + pulse * 0.2})`;
     ctx.beginPath();
     ctx.moveTo(-13 * scale, 30 * scale);
-    ctx.quadraticCurveTo(0, (63 + pulse * 8) * scale, 13 * scale, 30 * scale);
+    ctx.quadraticCurveTo(drift, (63 + pulse * 8) * scale, 13 * scale, 30 * scale);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = "#fff176";
     ctx.beginPath();
     ctx.moveTo(-7 * scale, 30 * scale);
-    ctx.quadraticCurveTo(0, (50 + pulse * 7) * scale, 7 * scale, 30 * scale);
+    ctx.quadraticCurveTo(drift * 0.65, (50 + pulse * 7) * scale, 7 * scale, 30 * scale);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
@@ -2415,4 +2501,8 @@ function clamp(value: number, min: number, max: number): number {
 
 function lerp(a: number, b: number, amount: number): number {
   return a + (b - a) * amount;
+}
+
+function smoothstep(value: number): number {
+  return value * value * (3 - 2 * value);
 }

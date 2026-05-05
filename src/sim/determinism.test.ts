@@ -98,6 +98,25 @@ describe("AsymSprint determinism", () => {
     expect(createResultBlob(second)).toEqual(createResultBlob(first));
   });
 
+  it("analog steering inputs are deterministic after frame quantization", () => {
+    const inputs = new Map<number, FrameInput>();
+
+    for (let frame = 0; frame < 150; frame += 1) {
+      inputs.set(frame, {
+        steer: frame < 50 ? -0.35 : frame < 95 ? 0.72 : -1,
+        fire: frame === 32 || frame === 96,
+        boost: frame === 64
+      });
+    }
+
+    const first = runFrames("analog-steer-seed", 210, inputs);
+    const second = runFrames("analog-steer-seed", 210, inputs);
+
+    expect(second).toEqual(first);
+    expect(createResultBlob(second).checksum).toBe(createResultBlob(first).checksum);
+    expect(Math.abs(second.player.lateral)).toBeGreaterThan(4);
+  });
+
   it("result blob and checksum generation are stable", () => {
     const inputs = new Map<number, FrameInput>([
       [1, { steer: 1, fire: false, boost: false }],
