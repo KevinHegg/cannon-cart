@@ -1,15 +1,16 @@
 import {
   MUTE_BUTTON_MARGIN,
   MUTE_BUTTON_SIZE,
-  STEER_ZONE_WIDTH_RATIO,
+  STEER_ZONE_DEADZONE_RATIO,
+  STEER_ZONE_FULL_POWER_RATIO,
+  STEER_ZONE_TOP_RATIO,
   TOUCH_BOTTOM_MARGIN,
-  TOUCH_BUTTON_GAP,
   TOUCH_BUTTON_SIZE
 } from "../game/constants";
 import { FrameInput } from "../sim/state";
 
 export interface InputVisualState {
-  steer: -1 | 0 | 1;
+  steer: number;
   touchingSteer: boolean;
   firePressed: boolean;
   boostPressed: boolean;
@@ -54,10 +55,11 @@ export function createInputControllerWithRestart(
   let pendingMuteToggle = false;
   let pendingUserGesture = false;
   let mutePressedFrames = 0;
-  let pointerId: number | null = null;
-  let dragStart: Point | null = null;
-  let dragCurrent: Point | null = null;
+  let steeringPointerId: number | null = null;
+  let steerTouch: Point | null = null;
   let touchingSteer = false;
+  const firePointers = new Set<number>();
+  const boostPointers = new Set<number>();
 
   const onKeyDown = (event: KeyboardEvent): void => {
     keys.add(event.code);
@@ -107,39 +109,48 @@ export function createInputControllerWithRestart(
 
     if (action === "fire") {
       pendingFire = true;
+      firePointers.add(event.pointerId);
+      capturePointer(canvas, event.pointerId);
       return;
     }
 
     if (action === "boost") {
       pendingBoost = true;
+      boostPointers.add(event.pointerId);
+      capturePointer(canvas, event.pointerId);
       return;
     }
 
-    pointerId = event.pointerId;
-    dragStart = point;
-    dragCurrent = point;
+    if (steeringPointerId !== null) {
+      return;
+    }
+
+    steeringPointerId = event.pointerId;
+    steerTouch = point;
     touchingSteer = true;
-    canvas.setPointerCapture(event.pointerId);
+    capturePointer(canvas, event.pointerId);
   };
 
   const onPointerMove = (event: PointerEvent): void => {
-    if (pointerId !== event.pointerId) {
+    if (steeringPointerId !== event.pointerId) {
       return;
     }
 
     event.preventDefault();
-    dragCurrent = getPoint(canvas, event);
+    steerTouch = getPoint(canvas, event);
   };
 
   const endPointer = (event: PointerEvent): void => {
-    if (pointerId !== event.pointerId) {
-      return;
+    firePointers.delete(event.pointerId);
+    boostPointers.delete(event.pointerId);
+
+    if (steeringPointerId === event.pointerId) {
+      steeringPointerId = null;
+      steerTouch = null;
+      touchingSteer = false;
     }
 
-    pointerId = null;
-    dragStart = null;
-    dragCurrent = null;
-    touchingSteer = false;
+    releasePointer(canvas, event.pointerId);
   };
 
   window.addEventListener("keydown", onKeyDown);
@@ -192,8 +203,8 @@ export function createInputControllerWithRestart(
       return {
         steer: getSteer(),
         touchingSteer,
-        firePressed: pendingFire,
-        boostPressed: pendingBoost,
+        firePressed: pendingFire || firePointers.size > 0,
+        boostPressed: pendingBoost || boostPointers.size > 0,
         mutePressed: mutePressedFrames > 0,
         dragAmount: getDragAmount()
       };
@@ -208,7 +219,7 @@ export function createInputControllerWithRestart(
     }
   };
 
-  function getSteer(): -1 | 0 | 1 {
+  function getSteer(): number {
     const keyboard =
       (keys.has("ArrowRight") || keys.has("KeyD") ? 1 : 0) -
       (keys.has("ArrowLeft") || keys.has("KeyA") ? 1 : 0);
@@ -217,25 +228,24 @@ export function createInputControllerWithRestart(
       return keyboard > 0 ? 1 : -1;
     }
 
-    if (!dragStart || !dragCurrent) {
+    if (!steerTouch) {
       return 0;
     }
 
-    const dx = dragCurrent.x - dragStart.x;
+    const rect = canvas.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const dx = steerTouch.x - centerX;
 
-    if (Math.abs(dx) < 18) {
+    if (Math.abs(dx) < rect.width * STEER_ZONE_DEADZONE_RATIO) {
       return 0;
     }
 
-    return dx > 0 ? 1 : -1;
+    const amount = Math.max(-1, Math.min(1, dx / (rect.width * STEER_ZONE_FULL_POWER_RATIO)));
+    return Math.sign(amount) * Math.min(1, Math.pow(Math.abs(amount), 0.86));
   }
 
   function getDragAmount(): number {
-    if (!dragStart || !dragCurrent) {
-      return 0;
-    }
-
-    return Math.max(-1, Math.min(1, (dragCurrent.x - dragStart.x) / 86));
+    return getSteer();
   }
 }
 
@@ -251,6 +261,10 @@ function getPoint(canvas: HTMLCanvasElement, event: PointerEvent): Point {
 function getActionAt(canvas: HTMLCanvasElement, point: Point): "fire" | "boost" | "steer" | "mute" {
   const rect = canvas.getBoundingClientRect();
   const buttonY = rect.height - TOUCH_BOTTOM_MARGIN - TOUCH_BUTTON_SIZE;
+  const buttonCenterY = buttonY + TOUCH_BUTTON_SIZE / 2;
+  const boostCenterX = TOUCH_BOTTOM_MARGIN + TOUCH_BUTTON_SIZE / 2;
+  const fireCenterX = rect.width - TOUCH_BOTTOM_MARGIN - TOUCH_BUTTON_SIZE / 2;
+  const buttonRadius = TOUCH_BUTTON_SIZE * 0.66;
 
   if (
     point.x > rect.width - MUTE_BUTTON_MARGIN - MUTE_BUTTON_SIZE &&
@@ -260,21 +274,37 @@ function getActionAt(canvas: HTMLCanvasElement, point: Point): "fire" | "boost" 
     return "mute";
   }
 
-  if (point.x < rect.width * STEER_ZONE_WIDTH_RATIO && point.y > rect.height * 0.52) {
-    return "steer";
-  }
-
-  if (point.y < buttonY) {
-    return "steer";
-  }
-
-  if (point.x > rect.width - TOUCH_BOTTOM_MARGIN - TOUCH_BUTTON_SIZE) {
+  if (distance(point.x, point.y, fireCenterX, buttonCenterY) <= buttonRadius) {
     return "fire";
   }
 
-  if (point.x > rect.width - TOUCH_BOTTOM_MARGIN - TOUCH_BUTTON_SIZE * 2 - TOUCH_BUTTON_GAP) {
+  if (distance(point.x, point.y, boostCenterX, buttonCenterY) <= buttonRadius) {
     return "boost";
   }
 
+  if (point.y >= rect.height * STEER_ZONE_TOP_RATIO) {
+    return "steer";
+  }
+
   return "steer";
+}
+
+function distance(aX: number, aY: number, bX: number, bY: number): number {
+  return Math.hypot(aX - bX, aY - bY);
+}
+
+function capturePointer(canvas: HTMLCanvasElement, pointerId: number): void {
+  if (canvas.hasPointerCapture(pointerId)) {
+    return;
+  }
+
+  canvas.setPointerCapture(pointerId);
+}
+
+function releasePointer(canvas: HTMLCanvasElement, pointerId: number): void {
+  if (!canvas.hasPointerCapture(pointerId)) {
+    return;
+  }
+
+  canvas.releasePointerCapture(pointerId);
 }

@@ -9,7 +9,7 @@ export const MATCH_SECONDS = 11;
 export const MATCH_FRAMES = MATCH_SECONDS * FRAMES_PER_SECOND;
 
 export const TRACK_LENGTH = 2460;
-export const TRACK_WIDTH = 255;
+export const TRACK_WIDTH = 300;
 export const TRACK_SAMPLE_STEP = 90;
 export const LANE_COUNT = 3;
 
@@ -18,7 +18,7 @@ export const PLAYER_START_SPEED = 180;
 export const PLAYER_CRUISE_SPEED = 245;
 export const PLAYER_MAX_SPEED = 315;
 export const PLAYER_ACCELERATION = 210;
-export const PLAYER_STEER_SPEED = 205;
+export const PLAYER_STEER_SPEED = 225;
 export const PLAYER_OFFROAD_SLOWDOWN = 0.965;
 export const PLAYER_BUMP_FRAMES = 22;
 
@@ -56,9 +56,10 @@ export const MAJOR_HAZARD_MAX = 2;
 
 export const CAMERA_LOOKAHEAD = 270;
 
-export const TOUCH_BUTTON_SIZE = 78;
-export const TOUCH_BUTTON_GAP = 14;
-export const TOUCH_BOTTOM_MARGIN = 24;
-export const STEER_ZONE_WIDTH_RATIO = 0.58;
+export const TOUCH_BUTTON_SIZE = 84;
+export const TOUCH_BOTTOM_MARGIN = 18;
+export const STEER_ZONE_TOP_RATIO = 0.56;
+export const STEER_ZONE_DEADZONE_RATIO = 0.075;
+export const STEER_ZONE_FULL_POWER_RATIO = 0.33;
 export const MUTE_BUTTON_SIZE = 36;
 export const MUTE_BUTTON_MARGIN = 17;

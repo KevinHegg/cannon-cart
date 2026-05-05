@@ -14,7 +14,7 @@ The core experience is:
 
 - A tiny vehicle races along a deterministic ribbon track.
 - The camera follows the vehicle from a top-down or tilted 2.5D arcade view.
-- The track scrolls and curves ahead like a compact portrait racing board.
+- The track scrolls and curves ahead like a wide, readable portrait racing board.
 - A roof cannon is a tactical tool, not the whole game.
 - The cannon can clear obstacles, tag a rival, or open a route.
 - Matches last 8-12 seconds.
@@ -57,7 +57,8 @@ MVP loop:
 - Replays must record only seed plus input events, not game states or video.
 - Keep replay payloads small enough to fit in a URL.
 - Prefer simple code over framework complexity.
-- Mobile controls matter: drag left/right to steer and use on-screen fire/boost buttons.
+- Mobile controls matter: steer from the lower central thumb zone, fire from the bottom-right button, and boost from the bottom-left button.
+- Touch input supports steering with one thumb while pressing fire or boost with another thumb.
 - Do not add React, Phaser, Three.js, Pixi, or a backend.
 - Do not implement Netlify, Apps Script, replay sharing, GIF sharing, or leaderboards until requested.
 - Do not copy protected intellectual property, characters, item designs, logos, UI motifs, or track motifs.
@@ -71,6 +72,7 @@ MVP loop:
 - In the forward lookahead, avoid showing more than 2 dangerous objects and 1 pickup at once.
 - Never block all practical lanes in one cluster; always preserve at least one clean path.
 - Prefer richer low-contrast campground scenery outside the track over more collidable objects.
+- Keep the road wide and readable: the bottom of the course should feel like a substantial rally ribbon, with scenery framing the track rather than squeezing it.
 
 ## Architecture
 

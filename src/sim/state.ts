@@ -7,7 +7,7 @@ import {
 } from "../seed/match";
 
 export interface FrameInput {
-  steer: -1 | 0 | 1;
+  steer: number;
   fire: boolean;
   boost: boolean;
   restart?: boolean;

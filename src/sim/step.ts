@@ -73,9 +73,10 @@ function applyBoostInput(state: GameState, input: FrameInput): void {
 function movePlayer(state: GameState, input: FrameInput): void {
   const boosting = state.player.boostFrames > 0;
   const targetSpeed = boosting ? PLAYER_MAX_SPEED : PLAYER_CRUISE_SPEED;
+  const steer = clamp(input.steer, -1, 1);
 
   state.player.speed += (targetSpeed - state.player.speed) * Math.min(1, PLAYER_ACCELERATION * FIXED_TIME_STEP / 100);
-  state.player.lateral += input.steer * PLAYER_STEER_SPEED * FIXED_TIME_STEP * (0.78 + state.player.speed / PLAYER_MAX_SPEED);
+  state.player.lateral += steer * PLAYER_STEER_SPEED * FIXED_TIME_STEP * (0.78 + state.player.speed / PLAYER_MAX_SPEED);
 
   const roadLimit = TRACK_WIDTH / 2 - PLAYER_RADIUS;
   if (Math.abs(state.player.lateral) > roadLimit) {
