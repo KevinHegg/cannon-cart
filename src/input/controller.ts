@@ -56,6 +56,7 @@ export function createInputControllerWithRestart(
   let pendingUserGesture = false;
   let mutePressedFrames = 0;
   let steeringPointerId: number | null = null;
+  let steerStart: Point | null = null;
   let steerTouch: Point | null = null;
   let touchingSteer = false;
   const firePointers = new Set<number>();
@@ -126,6 +127,7 @@ export function createInputControllerWithRestart(
     }
 
     steeringPointerId = event.pointerId;
+    steerStart = point;
     steerTouch = point;
     touchingSteer = true;
     capturePointer(canvas, event.pointerId);
@@ -146,6 +148,7 @@ export function createInputControllerWithRestart(
 
     if (steeringPointerId === event.pointerId) {
       steeringPointerId = null;
+      steerStart = null;
       steerTouch = null;
       touchingSteer = false;
     }
@@ -228,25 +231,27 @@ export function createInputControllerWithRestart(
       return keyboard > 0 ? 1 : -1;
     }
 
-    if (!steerTouch) {
+    if (!steerStart || !steerTouch) {
       return 0;
     }
 
     const rect = canvas.getBoundingClientRect();
-    const centerX = rect.width / 2;
-    const dx = steerTouch.x - centerX;
-
-    if (Math.abs(dx) < rect.width * STEER_ZONE_DEADZONE_RATIO) {
-      return 0;
-    }
-
-    const amount = Math.max(-1, Math.min(1, dx / (rect.width * STEER_ZONE_FULL_POWER_RATIO)));
-    return Math.sign(amount) * Math.min(1, Math.pow(Math.abs(amount), 0.86));
+    return calculateDragSteer(steerTouch.x - steerStart.x, rect.width);
   }
 
   function getDragAmount(): number {
     return getSteer();
   }
+}
+
+export function calculateDragSteer(deltaX: number, width: number): number {
+  const deadzone = width * STEER_ZONE_DEADZONE_RATIO;
+  if (Math.abs(deltaX) < deadzone) {
+    return 0;
+  }
+
+  const amount = Math.max(-1, Math.min(1, deltaX / (width * STEER_ZONE_FULL_POWER_RATIO)));
+  return Math.sign(amount) * Math.min(1, Math.pow(Math.abs(amount), 0.86));
 }
 
 function getPoint(canvas: HTMLCanvasElement, event: PointerEvent): Point {

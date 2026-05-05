@@ -1,5 +1,6 @@
 import { BOOST_FRAMES, DEFAULT_SEED, PLAYER_START_SPEED, RIVAL_CRUISE_SPEED, RIVAL_TAGGED_FRAMES } from "../game/constants";
 import {
+  HazardDefinition,
   MatchDefinition,
   ObstacleDefinition,
   PickupDefinition,
@@ -35,6 +36,8 @@ export interface ShotState {
   progress: number;
   lateral: number;
   ageFrames: number;
+  targetProgress: number | null;
+  targetLateral: number | null;
 }
 
 export interface ObstacleState extends ObstacleDefinition {
@@ -44,6 +47,11 @@ export interface ObstacleState extends ObstacleDefinition {
 
 export interface PickupState extends PickupDefinition {
   collected: boolean;
+}
+
+export interface HazardState extends HazardDefinition {
+  destroyed: boolean;
+  collided: boolean;
 }
 
 export interface MatchStats {
@@ -67,6 +75,7 @@ export interface GameState {
   shots: ShotState[];
   obstacles: ObstacleState[];
   pickups: PickupState[];
+  hazards: HazardState[];
   stats: MatchStats;
   cannonCooldown: number;
   nextShotId: number;
@@ -110,6 +119,11 @@ export function createInitialState(seed = DEFAULT_SEED): GameState {
     pickups: match.pickups.map((pickup) => ({
       ...pickup,
       collected: false
+    })),
+    hazards: match.hazards.map((hazard) => ({
+      ...hazard,
+      destroyed: false,
+      collided: false
     })),
     stats: {
       obstaclesCleared: 0,

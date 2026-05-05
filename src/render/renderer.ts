@@ -21,9 +21,9 @@ import { GameEvent } from "../game/events";
 import { InputVisualState } from "../input/controller";
 import { createResultBlob } from "../result/checksum";
 import { getResultQuip } from "../result/quip";
-import { ObstacleKind, getTrackCenterX, getTrackTangentX } from "../seed/match";
+import { HazardKind, ObstacleKind, getTrackCenterX, getTrackTangentX } from "../seed/match";
 import { GameState, ObstacleState, PickupState, hasShield, isBoosting } from "../sim/state";
-import { hazardIsActive } from "../sim/step";
+import { getHazardLateral, hazardIsActive, selectAutoAimTarget } from "../sim/step";
 
 interface Viewport {
   width: number;
@@ -72,7 +72,7 @@ interface LockTarget {
   progress: number;
   lateral: number;
   radius: number;
-  kind: "obstacle" | "rival";
+  kind: "obstacle" | "rival" | "hazard";
 }
 
 const EMPTY_INPUT_VISUAL: InputVisualState = {
@@ -245,7 +245,7 @@ export class Renderer {
         event.progress,
         event.lateral,
         event.frame,
-        colorForObstacle(event.obstacleKind ?? "barricade"),
+        event.hazardKind ? colorForHazard(event.hazardKind) : colorForObstacle(event.obstacleKind ?? "barricade"),
         event.callout ?? "CLEAR!"
       );
       this.shakeUntilFrame = Math.max(this.shakeUntilFrame, event.frame + 11);
@@ -295,11 +295,12 @@ export class Renderer {
     const shakeAmount = Math.max(0, this.shakeUntilFrame - state.frame) / 12;
     const shakeX = Math.sin(state.frame * 2.31) * 7 * shakeAmount;
     const shakeY = Math.cos(state.frame * 1.83) * 5 * shakeAmount;
+    const boostPullback = isBoosting(state.player) ? 0.94 : 1;
 
     return {
       centerX: getTrackCenterX(state.match, state.player.progress),
-      scale: clamp(Math.min(this.viewport.width / PORTRAIT_WIDTH, this.viewport.height / PORTRAIT_HEIGHT), 0.72, 1.16),
-      playerY: this.viewport.height * 0.715,
+      scale: clamp(Math.min(this.viewport.width / PORTRAIT_WIDTH, this.viewport.height / PORTRAIT_HEIGHT), 0.72, 1.16) * boostPullback,
+      playerY: this.viewport.height * (isBoosting(state.player) ? 0.735 : 0.715),
       shakeX,
       shakeY
     };
@@ -320,7 +321,7 @@ export class Renderer {
     const farAmount = smoothstep(clamp(lookahead / 760, 0, 1));
     const nearBoost = clamp(-lookahead / 220, 0, 1) * 0.06;
 
-    return lerp(0.98 + nearBoost, 0.68, farAmount);
+    return lerp(1.04 + nearBoost, 0.62, farAmount);
   }
 
   private getObjectScale(state: GameState, camera: Camera, progress: number, multiplier = 1): number {
@@ -329,10 +330,10 @@ export class Renderer {
 
   private drawBackground(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
     const sky = ctx.createLinearGradient(0, 0, 0, this.viewport.height);
-    sky.addColorStop(0, "#134a7c");
-    sky.addColorStop(0.36, "#4aa7d5");
-    sky.addColorStop(0.68, "#8fdca9");
-    sky.addColorStop(1, "#5ab56f");
+    sky.addColorStop(0, "#102a58");
+    sky.addColorStop(0.28, "#316fa4");
+    sky.addColorStop(0.58, "#57bba0");
+    sky.addColorStop(1, "#387b56");
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, this.viewport.width, this.viewport.height);
 
@@ -341,6 +342,7 @@ export class Renderer {
     this.drawClouds(ctx, state);
     this.drawParallaxHills(ctx, state, camera);
     this.drawToyScenery(ctx, state, camera);
+    this.drawRallyLights(ctx, state, camera);
     this.drawConfetti(ctx, state, camera);
 
     const vignette = ctx.createRadialGradient(
@@ -355,6 +357,41 @@ export class Renderer {
     vignette.addColorStop(1, "rgba(5, 11, 28, 0.26)");
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, this.viewport.width, this.viewport.height);
+  }
+
+  private drawRallyLights(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
+    ctx.save();
+    ctx.translate(camera.shakeX * 0.22, camera.shakeY * 0.22);
+    for (let index = -1; index < 12; index += 1) {
+      const progress = state.player.progress + index * 250 - ((state.player.progress * 0.2) % 250);
+      const y = camera.playerY - (progress - state.player.progress) * camera.scale * 0.42;
+      if (y < 72 || y > this.viewport.height + 80) {
+        continue;
+      }
+
+      const left = 34 + Math.sin(index * 2.1) * 8;
+      const right = this.viewport.width - 34 + Math.cos(index * 1.9) * 8;
+      ctx.strokeStyle = "rgba(255, 230, 161, 0.24)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(left, y);
+      ctx.quadraticCurveTo(this.viewport.width / 2, y + 22 + Math.sin(index) * 8, right, y + 5);
+      ctx.stroke();
+
+      for (let bulb = 0; bulb <= 5; bulb += 1) {
+        const t = bulb / 5;
+        const x = lerp(left, right, t);
+        const bulbY = y + Math.sin(t * Math.PI) * (18 + (index % 3) * 3);
+        const color = bulb % 3 === 0 ? "#ffd56a" : bulb % 3 === 1 ? "#41c7e8" : "#ff8aa0";
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.34 + Math.sin(state.frame * 0.06 + bulb + index) * 0.08;
+        ctx.beginPath();
+        ctx.arc(x, bulbY, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
   }
 
   private drawDioramaFloor(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
@@ -732,6 +769,7 @@ export class Renderer {
     this.drawLaneLine(ctx, state, camera, -TRACK_WIDTH / 6, 0);
     this.drawLaneLine(ctx, state, camera, TRACK_WIDTH / 6, 18);
     this.drawTrackStickers(ctx, state, camera);
+    this.drawSectorGates(ctx, state, camera);
   }
 
   private drawLaneLine(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera, lateral: number, phase: number): void {
@@ -772,6 +810,59 @@ export class Renderer {
       ctx.fill();
       ctx.setTransform(this.viewport.dpr, 0, 0, this.viewport.dpr, 0, 0);
       ctx.globalAlpha = 0.18;
+    }
+    ctx.restore();
+  }
+
+  private drawSectorGates(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
+    ctx.save();
+    for (let sector = 1; sector < state.match.sectorCount; sector += 1) {
+      const progress = state.match.sectorLength * sector;
+      const center = this.project(state, camera, progress, 0);
+      if (!this.isVisible(center, 90)) {
+        continue;
+      }
+
+      const left = this.project(state, camera, progress, -TRACK_WIDTH / 2 + 18);
+      const right = this.project(state, camera, progress, TRACK_WIDTH / 2 - 18);
+      const scale = this.getObjectScale(state, camera, progress);
+
+      ctx.strokeStyle = "rgba(62, 38, 24, 0.38)";
+      ctx.lineWidth = 8 * scale;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(left.x, left.y + 5 * scale);
+      ctx.lineTo(right.x, right.y + 5 * scale);
+      ctx.stroke();
+
+      ctx.strokeStyle = "#ffcf6f";
+      ctx.lineWidth = 4 * scale;
+      ctx.beginPath();
+      ctx.moveTo(left.x, left.y);
+      ctx.lineTo(right.x, right.y);
+      ctx.stroke();
+
+      for (let index = 0; index < 7; index += 1) {
+        const amount = index / 6;
+        const x = lerp(left.x, right.x, amount);
+        const y = lerp(left.y, right.y, amount) + Math.sin(state.frame * 0.05 + index) * 1.2 * scale;
+        ctx.fillStyle = index % 3 === 0 ? "#f05c45" : index % 3 === 1 ? "#41c7e8" : "#a8e06f";
+        ctx.beginPath();
+        ctx.moveTo(x - 6 * scale, y);
+        ctx.lineTo(x + 6 * scale, y);
+        ctx.lineTo(x, y + 12 * scale);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.fillStyle = "rgba(42, 27, 18, 0.78)";
+      this.roundRect(ctx, center.x - 34 * scale, center.y - 29 * scale, 68 * scale, 18 * scale, 7 * scale);
+      ctx.fill();
+      ctx.fillStyle = "#fff1ba";
+      ctx.font = `900 ${10 * scale}px ${HUD_FONT}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`SECTOR ${sector + 1}`, center.x, center.y - 20 * scale);
     }
     ctx.restore();
   }
@@ -865,18 +956,20 @@ export class Renderer {
   }
 
   private drawSpeedLines(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
-    const boostAlpha = isBoosting(state.player) ? 0.54 : 0.28;
+    const boosting = isBoosting(state.player);
+    const boostAlpha = boosting ? 0.72 : 0.28;
+    const count = boosting ? 28 : 14;
 
     ctx.save();
     ctx.lineCap = "round";
     ctx.strokeStyle = `rgba(231, 255, 255, ${boostAlpha})`;
-    ctx.lineWidth = 3 * camera.scale;
-    for (let index = 0; index < 14; index += 1) {
-      const progress = state.player.progress + 120 + index * 58 - ((state.frame * 9) % 58);
+    ctx.lineWidth = (boosting ? 4.5 : 3) * camera.scale;
+    for (let index = 0; index < count; index += 1) {
+      const progress = state.player.progress + 120 + index * 46 - ((state.frame * (boosting ? 16 : 9)) % 58);
       const side = index % 2 === 0 ? -1 : 1;
-      const lateral = side * (TRACK_WIDTH * 0.5 + 32 + (index % 4) * 9);
+      const lateral = side * (TRACK_WIDTH * 0.5 + 22 + (index % 4) * 10);
       const a = this.project(state, camera, progress, lateral);
-      const b = this.project(state, camera, progress - 58 - state.player.speed * 0.05, lateral + side * 10);
+      const b = this.project(state, camera, progress - 68 - state.player.speed * 0.07, lateral + side * 12);
       if (!this.isVisible(a, 100) && !this.isVisible(b, 100)) {
         continue;
       }
@@ -889,8 +982,13 @@ export class Renderer {
   }
 
   private drawHazards(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
-    for (const hazard of state.match.hazards) {
-      const point = this.project(state, camera, hazard.progress, hazard.lateral);
+    for (const hazard of state.hazards) {
+      if (hazard.destroyed) {
+        continue;
+      }
+
+      const currentLateral = getHazardLateral(hazard, state.frame);
+      const point = this.project(state, camera, hazard.progress, currentLateral);
       if (!this.isVisible(point, 110)) {
         continue;
       }
@@ -900,25 +998,19 @@ export class Renderer {
       const pulse = 0.5 + Math.sin((state.frame - hazard.startFrame) * 0.21) * 0.5;
       ctx.save();
       ctx.translate(point.x, point.y);
-      ctx.globalAlpha = active ? 0.88 : 0.28;
-      ctx.fillStyle = active ? "rgba(255, 195, 83, 0.18)" : "rgba(255, 232, 150, 0.1)";
-      ctx.strokeStyle = active ? "#e59b43" : "rgba(255, 235, 176, 0.32)";
+      ctx.globalAlpha = active ? (hazard.collided ? 0.42 : 0.9) : 0.28;
+      ctx.fillStyle = active ? "rgba(255, 195, 83, 0.16)" : "rgba(255, 232, 150, 0.1)";
+      ctx.strokeStyle = active ? colorForHazard(hazard.kind) : "rgba(255, 235, 176, 0.32)";
       ctx.lineWidth = 2.5 * scale;
       ctx.beginPath();
       ctx.arc(0, 0, (34 + pulse * 4) * scale, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = "#6f3f25";
-      ctx.strokeStyle = "#ffe6a1";
-      ctx.lineWidth = 3 * scale;
-      ctx.beginPath();
-      ctx.arc(0, 0, 12 * scale, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      this.drawMovingHazardIcon(ctx, hazard.kind, scale, active);
 
       ctx.save();
-      ctx.rotate(Math.sin(state.frame * 0.14 + hazard.id) * 0.45);
+      ctx.rotate(Math.sin(state.frame * 0.14 + hazard.id) * 0.45 + (hazard.kind === "rotator" ? state.frame * 0.05 : 0));
       ctx.lineCap = "round";
       ctx.strokeStyle = active ? "#f6d67b" : "rgba(255, 230, 161, 0.5)";
       ctx.lineWidth = 11 * scale;
@@ -935,6 +1027,20 @@ export class Renderer {
       ctx.stroke();
       ctx.restore();
 
+      if (hazard.clearable) {
+        ctx.fillStyle = "#fff8d7";
+        ctx.strokeStyle = "#3f291d";
+        ctx.lineWidth = 1.8 * scale;
+        this.roundRect(ctx, -17 * scale, -8 * scale, 34 * scale, 16 * scale, 8 * scale);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#d86f46";
+        ctx.font = `900 ${7.5 * scale}px ${HUD_FONT}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("POP", 0, 0);
+      }
+
       if (active) {
         ctx.strokeStyle = `rgba(255, 230, 161, ${0.32 + pulse * 0.22})`;
         ctx.lineWidth = 2 * scale;
@@ -944,6 +1050,48 @@ export class Renderer {
       }
       ctx.restore();
     }
+  }
+
+  private drawMovingHazardIcon(ctx: CanvasRenderingContext2D, kind: HazardKind, scale: number, active: boolean): void {
+    ctx.save();
+    ctx.globalAlpha *= active ? 1 : 0.72;
+    ctx.strokeStyle = "#ffe6a1";
+    ctx.lineWidth = 3 * scale;
+
+    if (kind === "rollingCooler") {
+      const cooler = ctx.createLinearGradient(-18 * scale, -13 * scale, 18 * scale, 13 * scale);
+      cooler.addColorStop(0, "#1e78a4");
+      cooler.addColorStop(0.5, "#41c7e8");
+      cooler.addColorStop(1, "#155d86");
+      ctx.fillStyle = cooler;
+      this.roundRect(ctx, -20 * scale, -14 * scale, 40 * scale, 28 * scale, 8 * scale);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#fff8d7";
+      this.roundRect(ctx, -16 * scale, -12 * scale, 32 * scale, 6 * scale, 3 * scale);
+      ctx.fill();
+    } else if (kind === "marshmallowBarrel") {
+      ctx.fillStyle = "#fff8d7";
+      this.roundRect(ctx, -17 * scale, -18 * scale, 34 * scale, 36 * scale, 13 * scale);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#d86f46";
+      ctx.lineWidth = 4 * scale;
+      ctx.beginPath();
+      ctx.moveTo(-16 * scale, -5 * scale);
+      ctx.lineTo(16 * scale, -5 * scale);
+      ctx.moveTo(-16 * scale, 7 * scale);
+      ctx.lineTo(16 * scale, 7 * scale);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = kind === "rotator" ? "#ff8aa0" : "#6f3f25";
+      ctx.beginPath();
+      ctx.arc(0, 0, 13 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    ctx.restore();
   }
 
   private drawPickups(ctx: CanvasRenderingContext2D, state: GameState, camera: Camera): void {
@@ -1150,7 +1298,7 @@ export class Renderer {
     ctx.arc(point.x, point.y, (lockTarget.radius + 17 + pulse * 5) * scale, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.strokeStyle = lockTarget.kind === "rival" ? "#bf8cff" : "#fff176";
+    ctx.strokeStyle = lockTarget.kind === "rival" ? "#bf8cff" : lockTarget.kind === "hazard" ? "#41c7e8" : "#fff176";
     ctx.lineWidth = 4.5 * scale;
     ctx.setLineDash([9 * scale, 7 * scale]);
     ctx.lineDashOffset = -state.frame * 0.85;
@@ -1286,6 +1434,7 @@ export class Renderer {
   ): void {
     const elapsed = state.frame / 60;
     const progress = clamp(state.player.progress / state.match.finishProgress, 0, 1);
+    const sector = Math.min(state.match.sectorCount, Math.floor(state.player.progress / state.match.sectorLength) + 1);
     const cooldownProgress = 1 - clamp(state.cannonCooldown / CANNON_COOLDOWN_FRAMES, 0, 1);
     const top = 12;
     const panelX = 10;
@@ -1320,8 +1469,8 @@ export class Renderer {
       ctx,
       panelX + 15 + metricWidth * 2,
       top + 20,
-      "HITS/CLEAR",
-      `${state.stats.cannonHits}/${state.stats.obstaclesCleared}`,
+      "SECTOR",
+      `${sector}/${state.match.sectorCount}`,
       "#a8e06f"
     );
 
@@ -1680,7 +1829,7 @@ export class Renderer {
       ctx.font = `900 12px ${HUD_FONT}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("Line up, pop blockers, grab boosts", this.viewport.width / 2, y + 17);
+      ctx.fillText("Drag, boost, auto-pop blockers", this.viewport.width / 2, y + 17);
       ctx.restore();
       return;
     }
@@ -1706,7 +1855,7 @@ export class Renderer {
     ctx.textAlign = "center";
     ctx.fillText("Camp Wobblewood Rally", this.viewport.width / 2, y + 26);
 
-    const lines = ["Steer to line up", "Fire to pop blockers", "Grab boost & shield"];
+    const lines = ["Drag to steer", "Boost for speed", "Tap FIRE to auto-pop blockers"];
     ctx.font = `800 13px ${HUD_FONT}`;
     lines.forEach((line, index) => {
       const chipY = y + 46 + index * 15;
@@ -1872,43 +2021,12 @@ export class Renderer {
       return null;
     }
 
-    let best: LockTarget | null = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
-
-    for (const obstacle of state.obstacles) {
-      if (obstacle.destroyed || !obstacle.clearable) {
-        continue;
-      }
-
-      const dProgress = obstacle.progress - state.player.progress;
-      const dLateral = Math.abs(obstacle.lateral - state.player.lateral);
-      if (dProgress < 54 || dProgress > 385 || dLateral > 44 + obstacle.radius * 0.22) {
-        continue;
-      }
-
-      if (dProgress < bestDistance) {
-        bestDistance = dProgress;
-        best = {
-          progress: obstacle.progress,
-          lateral: obstacle.lateral,
-          radius: obstacle.radius,
-          kind: "obstacle"
-        };
-      }
+    const target = selectAutoAimTarget(state);
+    if (!target) {
+      return null;
     }
 
-    const rivalProgress = state.rival.progress - state.player.progress;
-    const rivalLateral = Math.abs(state.rival.lateral - state.player.lateral);
-    if (rivalProgress > 62 && rivalProgress < 420 && rivalLateral < 44 && rivalProgress < bestDistance) {
-      best = {
-        progress: state.rival.progress,
-        lateral: state.rival.lateral,
-        radius: RIVAL_RADIUS,
-        kind: "rival"
-      };
-    }
-
-    return best;
+    return target;
   }
 
   private visibleProgressSamples(state: GameState, step: number): number[] {
@@ -2473,6 +2591,26 @@ function colorForObstacle(kind: ObstacleKind): string {
   }
 
   return "#8b5a3c";
+}
+
+function colorForHazard(kind: HazardKind): string {
+  if (kind === "rollingCooler") {
+    return "#41c7e8";
+  }
+
+  if (kind === "marshmallowBarrel") {
+    return "#fff176";
+  }
+
+  if (kind === "swingSign") {
+    return "#f6d67b";
+  }
+
+  if (kind === "logArm") {
+    return "#b36a3f";
+  }
+
+  return "#ff8aa0";
 }
 
 function indexColor(label: string): string {

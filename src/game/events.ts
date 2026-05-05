@@ -1,6 +1,6 @@
 import { hashStringToUint32, mixUint32 } from "../sim/rng";
 import { FrameInput, GameOutcome, GameState } from "../sim/state";
-import { ObstacleKind, PickupKind } from "../seed/match";
+import { HazardKind, ObstacleKind, PickupKind } from "../seed/match";
 
 export type GameEventKind =
   | "fire"
@@ -25,6 +25,7 @@ export interface GameEvent {
   lateral: number;
   callout?: string;
   obstacleKind?: ObstacleKind;
+  hazardKind?: HazardKind;
   pickupKind?: PickupKind;
   outcome?: GameOutcome;
 }
@@ -106,6 +107,35 @@ export function collectGameEvents(previous: GameState, next: GameState, input: F
         lateral: obstacle.lateral,
         obstacleKind: obstacle.kind,
         callout: chooseCallout(next.match.seed, frame, obstacle.id, HIT_CALLOUTS)
+      });
+    }
+  }
+
+  for (const hazard of next.hazards) {
+    const oldHazard = previous.hazards.find((candidate) => candidate.id === hazard.id);
+    if (!oldHazard) {
+      continue;
+    }
+
+    if (!oldHazard.destroyed && hazard.destroyed) {
+      events.push({
+        kind: "obstacleCleared",
+        frame,
+        progress: hazard.progress,
+        lateral: hazard.lateral,
+        hazardKind: hazard.kind,
+        callout: chooseCallout(next.match.seed, frame, hazard.id + 600, CLEAR_CALLOUTS)
+      });
+    }
+
+    if (!oldHazard.collided && hazard.collided) {
+      events.push({
+        kind: "obstacleHit",
+        frame,
+        progress: hazard.progress,
+        lateral: hazard.lateral,
+        hazardKind: hazard.kind,
+        callout: chooseCallout(next.match.seed, frame, hazard.id + 700, HIT_CALLOUTS)
       });
     }
   }

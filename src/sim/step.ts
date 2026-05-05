@@ -1,4 +1,5 @@
 import {
+  BOOST_SPEED_BONUS,
   CANNON_COOLDOWN_FRAMES,
   CANNON_SPEED_COST,
   FIXED_TIME_STEP,
@@ -16,6 +17,7 @@ import {
   SHOT_MAX_AGE_FRAMES,
   SHOT_RADIUS,
   SHOT_SPEED,
+  SHOT_TRACKING_SPEED,
   TRACK_WIDTH
 } from "../game/constants";
 import { HazardDefinition, getTrackCenterX } from "../seed/match";
@@ -23,6 +25,7 @@ import {
   EMPTY_INPUT,
   FrameInput,
   GameState,
+  HazardState,
   ObstacleState,
   PickupState,
   ShotState,
@@ -45,6 +48,7 @@ export function step(state: GameState, input: FrameInput = EMPTY_INPUT): GameSta
     shots: state.shots.map((shot) => ({ ...shot })),
     obstacles: state.obstacles.map((obstacle) => ({ ...obstacle })),
     pickups: state.pickups.map((pickup) => ({ ...pickup })),
+    hazards: state.hazards.map((hazard) => ({ ...hazard })),
     stats: { ...state.stats },
     cannonCooldown: Math.max(0, state.cannonCooldown - 1)
   };
@@ -66,17 +70,20 @@ export function step(state: GameState, input: FrameInput = EMPTY_INPUT): GameSta
 function applyBoostInput(state: GameState, input: FrameInput): void {
   if (input.boost && state.player.boostCharges > 0 && state.player.boostFrames <= 0) {
     state.player = activateBoost(state.player);
+    state.player.speed = Math.max(state.player.speed, PLAYER_CRUISE_SPEED + BOOST_SPEED_BONUS * 0.64);
     state.stats.pickupsUsed += 1;
   }
 }
 
 function movePlayer(state: GameState, input: FrameInput): void {
   const boosting = state.player.boostFrames > 0;
-  const targetSpeed = boosting ? PLAYER_MAX_SPEED : PLAYER_CRUISE_SPEED;
+  const targetSpeed = boosting ? Math.min(PLAYER_MAX_SPEED, PLAYER_CRUISE_SPEED + BOOST_SPEED_BONUS) : PLAYER_CRUISE_SPEED;
   const steer = clamp(input.steer, -1, 1);
+  const acceleration = boosting ? PLAYER_ACCELERATION * 1.45 : PLAYER_ACCELERATION;
+  const handling = boosting ? 0.92 : 1;
 
-  state.player.speed += (targetSpeed - state.player.speed) * Math.min(1, PLAYER_ACCELERATION * FIXED_TIME_STEP / 100);
-  state.player.lateral += steer * PLAYER_STEER_SPEED * FIXED_TIME_STEP * (0.78 + state.player.speed / PLAYER_MAX_SPEED);
+  state.player.speed += (targetSpeed - state.player.speed) * Math.min(1, acceleration * FIXED_TIME_STEP / 100);
+  state.player.lateral += steer * PLAYER_STEER_SPEED * handling * FIXED_TIME_STEP * (0.78 + state.player.speed / PLAYER_MAX_SPEED);
 
   const roadLimit = TRACK_WIDTH / 2 - PLAYER_RADIUS;
   if (Math.abs(state.player.lateral) > roadLimit) {
@@ -106,11 +113,14 @@ function fireCannon(state: GameState, input: FrameInput): void {
     return;
   }
 
+  const target = selectAutoAimTarget(state);
   state.shots.push({
     id: state.nextShotId,
     progress: state.player.progress + 30,
     lateral: state.player.lateral,
-    ageFrames: 0
+    ageFrames: 0,
+    targetProgress: target?.progress ?? null,
+    targetLateral: target?.lateral ?? null
   });
   state.nextShotId += 1;
   state.cannonCooldown = CANNON_COOLDOWN_FRAMES;
@@ -120,11 +130,19 @@ function fireCannon(state: GameState, input: FrameInput): void {
 
 function moveShots(state: GameState): void {
   state.shots = state.shots
-    .map((shot) => ({
-      ...shot,
-      progress: shot.progress + SHOT_SPEED * FIXED_TIME_STEP,
-      ageFrames: shot.ageFrames + 1
-    }))
+    .map((shot) => {
+      const nextLateral =
+        shot.targetLateral === null
+          ? shot.lateral
+          : shot.lateral + clamp(shot.targetLateral - shot.lateral, -SHOT_TRACKING_SPEED, SHOT_TRACKING_SPEED);
+
+      return {
+        ...shot,
+        progress: shot.progress + SHOT_SPEED * FIXED_TIME_STEP,
+        lateral: nextLateral,
+        ageFrames: shot.ageFrames + 1
+      };
+    })
     .filter((shot) => shot.ageFrames <= SHOT_MAX_AGE_FRAMES && shot.progress < state.player.progress + 920);
 }
 
@@ -152,6 +170,24 @@ function resolveShotHits(state: GameState): void {
       (SHOT_RADIUS + RIVAL_RADIUS) ** 2
     ) {
       state.rival = tagRival(state.rival);
+      state.stats.cannonHits += 1;
+      continue;
+    }
+
+    const hitHazard = state.hazards.find((hazard) => {
+      if (hazard.destroyed || !hazard.clearable || !hazardIsActive(state, hazard)) {
+        return false;
+      }
+
+      return (
+        distanceSq(shot.progress, shot.lateral, hazard.progress, getHazardLateral(hazard, state.frame)) <=
+        (SHOT_RADIUS + hazard.radius) ** 2
+      );
+    });
+
+    if (hitHazard) {
+      hitHazard.destroyed = true;
+      state.stats.obstaclesCleared += 1;
       state.stats.cannonHits += 1;
       continue;
     }
@@ -201,21 +237,25 @@ function resolveObstacleHits(state: GameState): void {
 }
 
 function resolveHazards(state: GameState): void {
-  for (const hazard of state.match.hazards) {
-    if (!hazardIsActive(state, hazard)) {
+  for (const hazard of state.hazards) {
+    if (hazard.destroyed || hazard.collided || !hazardIsActive(state, hazard)) {
       continue;
     }
 
+    const lateral = getHazardLateral(hazard, state.frame);
     if (
       Math.abs(state.player.progress - hazard.progress) < 44 &&
-      Math.abs(state.player.lateral - hazard.lateral) < 42
+      Math.abs(state.player.lateral - lateral) < 42
     ) {
       if (hasShield(state.player)) {
         state.player.shieldCharges = Math.max(0, state.player.shieldCharges - 1);
         state.stats.pickupsUsed += 1;
+        hazard.destroyed = hazard.clearable;
+        state.stats.obstaclesCleared += hazard.clearable ? 1 : 0;
       } else {
+        hazard.collided = true;
         state.player.bumpFrames = Math.max(state.player.bumpFrames, 10);
-        state.player.speed = Math.max(110, state.player.speed * 0.91);
+        state.player.speed = Math.max(110, state.player.speed * (hazard.clearable ? 0.84 : 0.88));
       }
     }
   }
@@ -251,6 +291,88 @@ function overlapsPlayer(state: GameState, item: ObstacleState | PickupState): bo
 
 export function hazardIsActive(state: Pick<GameState, "frame">, hazard: HazardDefinition): boolean {
   return state.frame >= hazard.startFrame && state.frame < hazard.startFrame + hazard.durationFrames;
+}
+
+export interface AutoAimTarget {
+  kind: "obstacle" | "rival" | "hazard";
+  id: number;
+  progress: number;
+  lateral: number;
+  radius: number;
+}
+
+export function selectAutoAimTarget(state: GameState): AutoAimTarget | null {
+  const obstacle = state.obstacles
+    .filter((candidate) => {
+      const dProgress = candidate.progress - state.player.progress;
+      const dLateral = Math.abs(candidate.lateral - state.player.lateral);
+      return !candidate.destroyed && candidate.clearable && dProgress > 42 && dProgress < 620 && dLateral < 105;
+    })
+    .sort((a, b) => a.progress - b.progress)[0];
+
+  if (obstacle) {
+    return {
+      kind: "obstacle",
+      id: obstacle.id,
+      progress: obstacle.progress,
+      lateral: obstacle.lateral,
+      radius: obstacle.radius
+    };
+  }
+
+  const rivalProgress = state.rival.progress - state.player.progress;
+  const rivalLateral = Math.abs(state.rival.lateral - state.player.lateral);
+  if (rivalProgress > 58 && rivalProgress < 680 && rivalLateral < 118) {
+    return {
+      kind: "rival",
+      id: 0,
+      progress: state.rival.progress,
+      lateral: state.rival.lateral,
+      radius: RIVAL_RADIUS
+    };
+  }
+
+  const hazard = state.hazards
+    .filter((candidate) => {
+      const lateral = getHazardLateral(candidate, state.frame);
+      const dProgress = candidate.progress - state.player.progress;
+      const dLateral = Math.abs(lateral - state.player.lateral);
+      return (
+        candidate.clearable &&
+        !candidate.destroyed &&
+        hazardIsActive(state, candidate) &&
+        dProgress > 45 &&
+        dProgress < 560 &&
+        dLateral < 128
+      );
+    })
+    .sort((a, b) => a.progress - b.progress)[0];
+
+  if (hazard) {
+    return {
+      kind: "hazard",
+      id: hazard.id,
+      progress: hazard.progress,
+      lateral: getHazardLateral(hazard, state.frame),
+      radius: hazard.radius
+    };
+  }
+
+  return null;
+}
+
+export function getHazardLateral(hazard: Pick<HazardState, "baseLateral" | "amplitude" | "periodFrames" | "phase" | "motion">, frame: number): number {
+  const amount = (frame / hazard.periodFrames) * Math.PI * 2 + hazard.phase;
+
+  if (hazard.motion === "cross") {
+    return hazard.baseLateral + Math.sin(amount) * hazard.amplitude;
+  }
+
+  if (hazard.motion === "sweep") {
+    return hazard.baseLateral + Math.sin(amount) * hazard.amplitude * 0.72;
+  }
+
+  return hazard.baseLateral + Math.sin(amount) * hazard.amplitude * 0.42;
 }
 
 function distanceSq(aProgress: number, aLateral: number, bProgress: number, bLateral: number): number {

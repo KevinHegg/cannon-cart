@@ -12,6 +12,7 @@ import {
   TOTAL_PICKUP_MAX,
   TOTAL_PICKUP_MIN,
   RIVAL_START_LEAD,
+  SECTOR_COUNT,
   TRACK_LENGTH,
   TRACK_SAMPLE_STEP,
   TRACK_WIDTH
@@ -19,6 +20,8 @@ import {
 import { createRng } from "../sim/rng";
 
 export type ObstacleKind = "cone" | "cooler" | "mud" | "barricade" | "log";
+export type HazardKind = "rollingCooler" | "swingSign" | "logArm" | "marshmallowBarrel" | "rotator";
+export type HazardMotion = "cross" | "sweep" | "wobble";
 export type PickupKind = "boost" | "shield";
 
 export interface TrackSample {
@@ -47,12 +50,19 @@ export interface PickupDefinition {
 
 export interface HazardDefinition {
   id: number;
+  kind: HazardKind;
+  motion: HazardMotion;
   startFrame: number;
   durationFrames: number;
   progress: number;
   lane: number;
   lateral: number;
+  baseLateral: number;
+  amplitude: number;
+  periodFrames: number;
+  phase: number;
   radius: number;
+  clearable: boolean;
 }
 
 export interface RivalScript {
@@ -66,6 +76,8 @@ export interface MatchDefinition {
   seed: string;
   durationFrames: number;
   finishProgress: number;
+  sectorCount: number;
+  sectorLength: number;
   trackWidth: number;
   samples: TrackSample[];
   obstacles: ObstacleDefinition[];
@@ -76,9 +88,8 @@ export interface MatchDefinition {
 
 const CLEARABLE_KINDS: ObstacleKind[] = ["barricade", "cooler"];
 const STEER_AROUND_KINDS: ObstacleKind[] = ["cone", "log", "mud"];
+const HAZARD_KINDS: HazardKind[] = ["rollingCooler", "swingSign", "logArm", "marshmallowBarrel", "rotator"];
 const PICKUP_KINDS: PickupKind[] = ["boost", "shield"];
-const DANGER_BEATS = [430, 730, 1035, 1345, 1655, 1965, 2265];
-const PICKUP_BEATS = [950, 1515, 2090];
 
 export function laneToLateral(lane: number, trackWidth = TRACK_WIDTH): number {
   const laneWidth = trackWidth / LANE_COUNT;
@@ -87,15 +98,18 @@ export function laneToLateral(lane: number, trackWidth = TRACK_WIDTH): number {
 
 export function generateMatch(seed: string): MatchDefinition {
   const rng = createRng(`${seed}:asym-sprint`);
-  const finishProgress = TRACK_LENGTH + rng.nextInt(-80, 80);
+  const finishProgress = TRACK_LENGTH + rng.nextInt(-160, 180);
+  const sectorLength = finishProgress / SECTOR_COUNT;
   const samples: TrackSample[] = [];
   let centerX = 0;
-  let drift = rng.nextRange(-42, 42);
+  let drift = rng.nextRange(-52, 52);
 
   for (let progress = -TRACK_SAMPLE_STEP * 2; progress <= finishProgress + 720; progress += TRACK_SAMPLE_STEP) {
-    drift = clamp(drift + rng.nextRange(-34, 34), -112, 112);
-    centerX += drift * 0.24;
-    centerX = clamp(centerX, -360, 360);
+    const sector = Math.floor(Math.max(0, progress) / sectorLength);
+    const drama = 1 + Math.min(2, sector) * 0.18;
+    drift = clamp(drift + rng.nextRange(-30, 36) * drama, -130, 130);
+    centerX += drift * 0.25;
+    centerX = clamp(centerX, -420, 420);
     samples.push({ progress, centerX });
   }
 
@@ -110,24 +124,37 @@ export function generateMatch(seed: string): MatchDefinition {
   const hazards: HazardDefinition[] = [];
 
   for (let beatIndex = 0; beatIndex < totalDangerous; beatIndex += 1) {
-    const baseProgress = DANGER_BEATS[beatIndex];
+    const beatSpacing = (finishProgress - INTRO_SAFE_PROGRESS - 620) / totalDangerous;
+    const sector = Math.min(SECTOR_COUNT - 1, Math.floor((beatIndex / totalDangerous) * SECTOR_COUNT));
+    const baseProgress = INTRO_SAFE_PROGRESS + 220 + beatIndex * beatSpacing + sector * 60;
     const progress = spacedProgress(
-      clamp(baseProgress + rng.nextRange(-28, 32), INTRO_SAFE_PROGRESS + 48, finishProgress - 145),
+      clamp(baseProgress + rng.nextRange(-42, 48), INTRO_SAFE_PROGRESS + 48, finishProgress - 240),
       usedDangerProgresses
     );
     usedDangerProgresses.push(progress);
     const lane = chooseLane(rng, beatIndex);
 
     if (hazardBeatIndexes.has(beatIndex)) {
-      const startFrame = Math.max(118, Math.round((progress / finishProgress) * MATCH_FRAMES) - rng.nextInt(18, 34));
+      const kind = HAZARD_KINDS[(hazards.length + beatIndex) % HAZARD_KINDS.length];
+      const motion: HazardMotion = kind === "swingSign" || kind === "logArm" ? "sweep" : kind === "rotator" ? "wobble" : "cross";
+      const startFrame = Math.max(110, Math.round((progress / finishProgress) * MATCH_FRAMES) - rng.nextInt(45, 82));
+      const baseLateral = laneToLateral(lane) + rng.nextRange(-12, 12);
+      const amplitude = motion === "wobble" ? rng.nextRange(22, 38) : rng.nextRange(58, 88);
       hazards.push({
         id: hazards.length,
+        kind,
+        motion,
         startFrame,
-        durationFrames: 54 + rng.nextInt(0, 18),
+        durationFrames: 165 + rng.nextInt(0, 92),
         progress,
         lane,
-        lateral: laneToLateral(lane) + rng.nextRange(-8, 8),
-        radius: 34
+        lateral: baseLateral,
+        baseLateral,
+        amplitude,
+        periodFrames: motion === "sweep" ? rng.nextInt(112, 156) : rng.nextInt(88, 132),
+        phase: rng.nextRange(0, Math.PI * 2),
+        radius: kind === "logArm" ? 38 : 32,
+        clearable: kind === "rollingCooler" || kind === "marshmallowBarrel"
       });
       continue;
     }
@@ -152,11 +179,11 @@ export function generateMatch(seed: string): MatchDefinition {
   const pickups: PickupDefinition[] = [];
   for (let id = 0; id < pickupCount; id += 1) {
     const lane = chooseLane(rng, id + 9);
-    const baseProgress = PICKUP_BEATS[id];
+    const baseProgress = INTRO_SAFE_PROGRESS + 420 + id * ((finishProgress - INTRO_SAFE_PROGRESS - 920) / pickupCount);
     pickups.push({
       id,
       kind: PICKUP_KINDS[id % PICKUP_KINDS.length],
-      progress: clamp(baseProgress + rng.nextRange(-38, 44), INTRO_SAFE_PROGRESS + 220, finishProgress - 160),
+      progress: clamp(baseProgress + rng.nextRange(-70, 80), INTRO_SAFE_PROGRESS + 220, finishProgress - 230),
       lane,
       lateral: laneToLateral(lane) + rng.nextRange(-10, 10),
       radius: 23
@@ -167,22 +194,24 @@ export function generateMatch(seed: string): MatchDefinition {
     seed,
     durationFrames: MATCH_FRAMES,
     finishProgress,
+    sectorCount: SECTOR_COUNT,
+    sectorLength,
     trackWidth: TRACK_WIDTH,
     samples,
     obstacles,
     pickups,
     hazards,
     rival: {
-      startProgress: RIVAL_START_LEAD + rng.nextRange(25, 70),
-      lateralAmplitude: rng.nextRange(28, 56),
-      weaveFrequency: rng.nextRange(0.0048, 0.0085),
+      startProgress: RIVAL_START_LEAD + rng.nextRange(35, 90),
+      lateralAmplitude: rng.nextRange(38, 72),
+      weaveFrequency: rng.nextRange(0.0052, 0.0095),
       phase: rng.nextRange(0, Math.PI * 2)
     }
   };
 }
 
 function chooseHazardBeatIndexes(totalDangerous: number, hazardCount: number, rng: ReturnType<typeof createRng>): Set<number> {
-  const candidates = [Math.min(totalDangerous - 2, 4), Math.min(totalDangerous - 1, 5), 3].filter((index) => index > 1);
+  const candidates = Array.from({ length: totalDangerous }, (_, index) => index).filter((index) => index > 3);
   const chosen = new Set<number>();
 
   while (chosen.size < hazardCount && candidates.length > 0) {
@@ -198,7 +227,9 @@ function chooseClearableBeatIndexes(
   hazardBeatIndexes: Set<number>,
   clearableCount: number
 ): Set<number> {
-  const preferred = [1, 3, 5, 2, 4, 6].filter((index) => index < totalDangerous && !hazardBeatIndexes.has(index));
+  const preferred = [1, 3, 5, 7, 9, 11, 13, 15, 2, 4, 6, 8, 10, 12, 14].filter(
+    (index) => index < totalDangerous && !hazardBeatIndexes.has(index)
+  );
   return new Set(preferred.slice(0, clearableCount));
 }
 

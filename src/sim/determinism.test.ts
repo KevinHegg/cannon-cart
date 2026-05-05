@@ -6,23 +6,27 @@ import {
   CLEARABLE_BLOCKER_MIN,
   DENSITY_LOOKAHEAD_PROGRESS,
   INTRO_SAFE_PROGRESS,
+  MAJOR_HAZARD_MAX,
+  MAJOR_HAZARD_MIN,
   MATCH_FRAMES,
   MAX_VISIBLE_DANGEROUS_OBSTACLES,
-  MAX_VISIBLE_MAJOR_PRESSURE,
   MAX_VISIBLE_PICKUPS,
   MIN_CLUSTER_GAP,
+  PLAYER_CRUISE_SPEED,
+  SECTOR_COUNT,
   TOTAL_DANGEROUS_MAX,
   TOTAL_DANGEROUS_MIN,
   TOTAL_PICKUP_MAX,
   TOTAL_PICKUP_MIN
 } from "../game/constants";
 import { collectGameEvents, GameEvent } from "../game/events";
+import { calculateDragSteer } from "../input/controller";
 import { createResultBlob } from "../result/checksum";
 import { getResultQuip } from "../result/quip";
 import { generateMatch } from "../seed/match";
 import { createRng } from "./rng";
 import { createInitialState, FrameInput, GameState } from "./state";
-import { step } from "./step";
+import { getHazardLateral, selectAutoAimTarget, step } from "./step";
 
 interface PacingObject {
   progress: number;
@@ -78,6 +82,8 @@ describe("AsymSprint determinism", () => {
     expect(first.obstacles.length + first.hazards.length).toBeLessThanOrEqual(TOTAL_DANGEROUS_MAX);
     expect(first.pickups.some((pickup) => pickup.kind === "boost")).toBe(true);
     expect(first.pickups.some((pickup) => pickup.kind === "shield")).toBe(true);
+    expect(first.sectorCount).toBe(SECTOR_COUNT);
+    expect(first.sectorLength).toBeCloseTo(first.finishProgress / SECTOR_COUNT);
   });
 
   it("same seed plus same input frames produces the same final result", () => {
@@ -165,8 +171,78 @@ describe("AsymSprint determinism", () => {
       expect(match.pickups.length).toBeLessThanOrEqual(TOTAL_PICKUP_MAX);
       expect(clearable).toBeGreaterThanOrEqual(CLEARABLE_BLOCKER_MIN);
       expect(clearable).toBeLessThanOrEqual(CLEARABLE_BLOCKER_MAX);
-      expect(match.hazards.length).toBeLessThanOrEqual(MAX_VISIBLE_MAJOR_PRESSURE + 1);
+      expect(match.hazards.length).toBeGreaterThanOrEqual(MAJOR_HAZARD_MIN);
+      expect(match.hazards.length).toBeLessThanOrEqual(MAJOR_HAZARD_MAX);
     }
+  });
+
+  it("drag-to-steer input maps horizontal motion smoothly", () => {
+    expect(calculateDragSteer(0, 390)).toBe(0);
+    expect(calculateDragSteer(8, 390)).toBe(0);
+    expect(calculateDragSteer(80, 390)).toBeGreaterThan(0.4);
+    expect(calculateDragSteer(-80, 390)).toBeLessThan(-0.4);
+    expect(calculateDragSteer(999, 390)).toBe(1);
+    expect(calculateDragSteer(-999, 390)).toBe(-1);
+  });
+
+  it("boost creates a deterministic speed surge", () => {
+    const boosted = step(createInitialState("boost-seed"), { steer: 0, fire: false, boost: true });
+    const cruising = step(createInitialState("boost-seed"), { steer: 0, fire: false, boost: false });
+
+    expect(boosted.player.boostFrames).toBeGreaterThan(0);
+    expect(boosted.player.speed).toBeGreaterThan(PLAYER_CRUISE_SPEED);
+    expect(boosted.player.speed).toBeGreaterThan(cruising.player.speed);
+    expect(boosted.stats.pickupsUsed).toBe(1);
+  });
+
+  it("auto-aim deterministically prefers clearable blockers", () => {
+    let state = createInitialState("auto-aim-seed");
+    const blocker = state.obstacles.find((obstacle) => obstacle.clearable);
+    expect(blocker).toBeDefined();
+
+    if (!blocker) {
+      return;
+    }
+
+    state = {
+      ...state,
+      player: {
+        ...state.player,
+        progress: blocker.progress - 180,
+        lateral: blocker.lateral
+      },
+      rival: {
+        ...state.rival,
+        progress: blocker.progress - 100,
+        lateral: blocker.lateral
+      }
+    };
+
+    const target = selectAutoAimTarget(state);
+    expect(target).toEqual({
+      kind: "obstacle",
+      id: blocker.id,
+      progress: blocker.progress,
+      lateral: blocker.lateral,
+      radius: blocker.radius
+    });
+
+    const fired = step(state, { steer: 0, fire: true, boost: false });
+    expect(fired.shots[0].targetLateral).toBe(blocker.lateral);
+  });
+
+  it("moving hazards are generated and move deterministically", () => {
+    const first = generateMatch("moving-hazards");
+    const second = generateMatch("moving-hazards");
+    const hazard = first.hazards[0];
+
+    expect(first.hazards.length).toBeGreaterThan(0);
+    expect(second.hazards).toEqual(first.hazards);
+    expect(first.hazards.some((candidate) => candidate.clearable)).toBe(true);
+    expect(getHazardLateral(hazard, hazard.startFrame)).toBe(getHazardLateral(hazard, hazard.startFrame));
+    expect(getHazardLateral(hazard, hazard.startFrame + Math.floor(hazard.periodFrames / 4))).not.toBe(
+      getHazardLateral(hazard, hazard.startFrame)
+    );
   });
 
   it("intro quiet zone has no immediate dangerous obstacles", () => {

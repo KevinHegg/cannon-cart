@@ -1,8 +1,8 @@
 # Cannon Cart: AsymSprint
 
-Portrait-first TypeScript Canvas 2D prototype for a deterministic 8-12 second arcade cannon-cart sprint set in **Camp Wobblewood**, an original cartoon campground and picnic-derby world.
+Portrait-first TypeScript Canvas 2D prototype for a deterministic three-sector arcade cannon-cart sprint set in **Camp Wobblewood Rally Nights**, an original cartoon campground and picnic-derby world.
 
-The current run is paced around readable moments on a wide portrait rally ribbon: steer through a quiet intro, line up the roof cannon for a few clearable blockers, grab a useful pickup, dodge a small number of camp props, and beat the rival to the finish.
+The current run lasts roughly 30-45 seconds and escalates across three sectors: drag to steer through a quiet intro, auto-pop blockers with the roof cannon, spend boost for a visible speed burst, dodge moving camp hazards, and beat the rival to the finish.
 
 ## Run
 
@@ -29,8 +29,8 @@ Desktop:
 
 Mobile:
 
-- Steer from the lower central driving zone. Touch left of center to steer left, right of center to steer right, and move farther from center for stronger steering.
-- Tap `FIRE` in the bottom-right corner to shoot forward along the cart lane.
+- Drag left or right from the lower central driving zone to steer. Releasing the steering touch returns the cart toward neutral.
+- Tap `FIRE` in the bottom-right corner to auto-aim at the most useful forward target: clearable blockers first, then the rival or a crossing hazard.
 - Tap `BOOST` in the bottom-left corner to spend a stored boost charge.
 - Multi-touch is supported, so you can steer with one thumb while firing or boosting with the other.
 - Tap the speaker button in the top HUD to mute or unmute.
@@ -49,7 +49,7 @@ To test on a phone:
 1. Run `npm run dev:host`.
 2. Make sure the phone and computer are on the same Wi-Fi network.
 3. Open the Vite Network URL shown in the terminal, usually something like `http://192.168.x.x:5173/`.
-4. Rotate the phone to portrait and use the lower central steering zone plus the bottom-left `BOOST` and bottom-right `FIRE` buttons.
+4. Rotate the phone to portrait, drag in the lower central steering zone, and use the bottom-left `BOOST` plus bottom-right `FIRE` buttons.
 
 ## Determinism
 

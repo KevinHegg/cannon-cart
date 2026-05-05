@@ -4,7 +4,7 @@
 
 This is a mobile-first TypeScript Canvas 2D game currently titled **Cannon Cart: AsymSprint**.
 
-The desired game is an 8-12 second deterministic micro-racing encounter generated from a tiny seed.
+The desired game is a 30-45 second deterministic portrait road-combat sprint generated from a tiny seed.
 
 This is NOT a side-view artillery game. Do not build a slow cannon wagon on hills. Do not anchor a cannon cart at the bottom of the screen shooting at distant targets.
 
@@ -17,7 +17,7 @@ The core experience is:
 - The track scrolls and curves ahead like a wide, readable portrait racing board.
 - A roof cannon is a tactical tool, not the whole game.
 - The cannon can clear obstacles, tag a rival, or open a route.
-- Matches last 8-12 seconds.
+- Matches currently run as three short escalating sectors, roughly 30-45 seconds total.
 - Each match is generated from a tiny seed.
 - Future versions will support attacker/defender challenge sharing and leaderboards.
 
@@ -28,14 +28,14 @@ Build **AsymSprint**, not artillery.
 MVP loop:
 
 1. Load deterministic seed.
-2. Generate a short ribbon track with curves, lanes, obstacles, pickups, and a finish gate.
-3. Start a 10-12 second encounter.
+2. Generate a three-sector ribbon track with curves, lanes, moving hazards, obstacles, pickups, and a finish gate.
+3. Start a fast 30-45 second encounter.
 4. Player drives a tiny car/cart.
 5. Player can steer, boost, and fire a roof cannon.
-6. Cannon shots cost momentum or have a cooldown.
+6. Cannon shots auto-aim at useful forward targets, cost momentum or have a cooldown, and should feel tactical.
 7. Obstacles slow the player unless cleared or avoided.
 8. Pickups provide one-use boost or shield.
-9. A deterministic rival/defender/hazard script creates pressure.
+9. A deterministic rival/defender/hazard script creates escalating pressure across the sectors.
 10. End with win/loss/result summary.
 
 ## Hard Requirements
@@ -57,7 +57,7 @@ MVP loop:
 - Replays must record only seed plus input events, not game states or video.
 - Keep replay payloads small enough to fit in a URL.
 - Prefer simple code over framework complexity.
-- Mobile controls matter: steer from the lower central thumb zone, fire from the bottom-right button, and boost from the bottom-left button.
+- Mobile controls matter: drag left/right from the lower central thumb zone, fire from the bottom-right button, and boost from the bottom-left button.
 - Touch input supports steering with one thumb while pressing fire or boost with another thumb.
 - Do not add React, Phaser, Three.js, Pixi, or a backend.
 - Do not implement Netlify, Apps Script, replay sharing, GIF sharing, or leaderboards until requested.
@@ -67,12 +67,13 @@ MVP loop:
 
 - Keep the board readable on a phone first.
 - The first 1.2-1.5 seconds should be a quiet intro with no immediate dangerous obstacle.
-- A run should feel like a few clear beats, not constant object spam.
-- Target 4-7 total dangerous objects, 2-3 cannon-clearable blockers, 2-3 pickups, and 1-2 major hazards.
-- In the forward lookahead, avoid showing more than 2 dangerous objects and 1 pickup at once.
+- A run should feel like three escalating sets of clear beats, not constant object spam.
+- For the longer current build, target a readable spread of dangerous objects, cannon-clearable blockers, pickups, and a handful of moving hazards across all three sectors.
+- In the forward lookahead, avoid showing more than 3 dangerous objects and 1 pickup at once.
 - Never block all practical lanes in one cluster; always preserve at least one clean path.
 - Prefer richer low-contrast campground scenery outside the track over more collidable objects.
 - Keep the road wide and readable: the bottom of the course should feel like a substantial rally ribbon, with scenery framing the track rather than squeezing it.
+- Boost should be visibly powerful but deterministic, and fire should currently use deterministic auto-aim instead of free aiming.
 
 ## Architecture
 
